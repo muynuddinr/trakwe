@@ -13,7 +13,7 @@ npm install
 npm run dev
 ```
 
-Visit **http://localhost:4173** in your browser.
+Visit **http://localhost:3000** in your browser.
 
 ### 2. Verify Compilation & Static Build
 
@@ -221,7 +221,7 @@ npm run tracker:sim -- --extended
 ```bash
 npm run dev
 # or for production static export:
-npm run build && npx serve out -l 4173
+npm run build && npx serve out -l 3000
 ```
 
 ---

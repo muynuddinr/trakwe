@@ -1,0 +1,39 @@
+{
+  "name": "trackwe",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 0.0.0.0 --port 4173",
+    "start": "next start --hostname 0.0.0.0 --port 4173",
+    "build": "next build",
+    "typecheck": "tsc --noEmit",
+    "tracker:start": "npx tsx tracker-service/src/index.ts",
+    "tracker:sim": "npx tsx tracker-service/src/simulator/fmc920-simulator.ts",
+    "tracker:test": "npx tsx tracker-service/tests/run-all-tests.ts"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.6",
+    "clsx": "^2.1.1",
+    "dotenv": "^18.0.9",
+    "leaflet": "1.9.4",
+    "lucide-react": "^0.468.0",
+    "next": "^15.5.28",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-leaflet": "5.0.0",
+    "recharts": "^2.15.0",
+    "tailwind-merge": "^3.0.0",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/leaflet": "^1.9.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/ws": "^8.18.2",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.7.0"
+  }
+}

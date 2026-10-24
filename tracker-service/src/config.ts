@@ -40,17 +40,22 @@ export function parseAllowedDevices(envString?: string): TrackerRegistryEntry[] 
     return defaultDevices;
   }
 
-  // Format: "IMEI1:VEHICLE_ID1,IMEI2:VEHICLE_ID2"
+  // Format: "IMEI1:VEHICLE_ID1[:VEHICLE_NAME[:REGISTRATION]],IMEI2:VEHICLE_ID2..."
   const entries: TrackerRegistryEntry[] = [];
   const pairs = envString.split(',').map((s) => s.trim()).filter(Boolean);
 
   for (const pair of pairs) {
-    const [imei, vehicleId] = pair.split(':').map((s) => s.trim());
+    const parts = pair.split(':').map((s) => s.trim());
+    const imei = parts[0];
+    const vehicleId = parts[1];
+    const vehicleName = parts[2] || `Vehicle ${vehicleId}`;
+    const registration = parts[3] || undefined;
     if (imei && vehicleId) {
       entries.push({
         imei,
         vehicleId,
-        vehicleName: `Vehicle ${vehicleId}`,
+        vehicleName,
+        registration,
         deviceModel: 'Teltonika FMC920 4G LTE Cat 1',
         enabled: true
       });

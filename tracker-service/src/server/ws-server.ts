@@ -1,3 +1,4 @@
+import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { ITrackingStore } from '../store/tracker-store';
 import {
@@ -6,6 +7,7 @@ import {
   DeviceConnectionHealth,
   TrackerRegistryEntry
 } from '../types';
+import { createHttpApiHandler, HttpApiOptions } from './http-api';
 
 interface ClientContext {
   ws: WebSocket;
@@ -16,27 +18,41 @@ interface ClientContext {
 }
 
 export class TrackingWsServer {
+  private httpServer: http.Server | null = null;
   private wss: WebSocketServer | null = null;
   private readonly store: ITrackingStore;
   private readonly port: number;
+  private readonly apiOptions: HttpApiOptions;
   private clients: Set<ClientContext> = new Set();
   private heartbeatInterval: NodeJS.Timeout | null = null;
 
-  constructor(store: ITrackingStore, port: number) {
+  constructor(store: ITrackingStore, port: number, apiOptions?: Partial<HttpApiOptions>) {
     this.store = store;
     this.port = port;
+    this.apiOptions = {
+      staleThresholdSeconds: 60,
+      tcpHost: '0.0.0.0',
+      tcpPort: 5027,
+      ...apiOptions
+    };
   }
 
   public start(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.wss = new WebSocketServer({ port: this.port }, () => {
-        console.log(`[WS Server] Dashboard WebSocket server listening on ws://0.0.0.0:${this.port}`);
-        resolve();
+      // 1. Create HTTP API server
+      const httpHandler = createHttpApiHandler(this.store, this.apiOptions);
+      this.httpServer = http.createServer(httpHandler);
+
+      // 2. Attach WebSocket server to the same HTTP server
+      this.wss = new WebSocketServer({ server: this.httpServer });
+
+      this.httpServer.on('error', (err) => {
+        console.error(`[HTTP/WS Server Error] Failed on port ${this.port}:`, err.message);
+        reject(err);
       });
 
       this.wss.on('error', (err) => {
         console.error(`[WS Server Error] Failed on port ${this.port}:`, err.message);
-        reject(err);
       });
 
       this.wss.on('connection', (ws, req) => {
@@ -105,6 +121,14 @@ export class TrackingWsServer {
           client.ws.ping();
         }
       }, 30000);
+
+      this.httpServer.listen(this.port, '0.0.0.0', () => {
+        console.log(`[HTTP/WS Server] Live Telemetry HTTP API & WebSocket listening on http://0.0.0.0:${this.port}`);
+        console.log(`  - Health:    GET http://0.0.0.0:${this.port}/api/live/health`);
+        console.log(`  - Vehicles:  GET http://0.0.0.0:${this.port}/api/live/vehicles`);
+        console.log(`  - WebSocket: ws://0.0.0.0:${this.port}/ws`);
+        resolve();
+      });
     });
   }
 
@@ -112,8 +136,11 @@ export class TrackingWsServer {
     return new Promise((resolve) => {
       if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
       if (this.wss) {
-        this.wss.close(() => {
-          console.log('[WS Server] Stopped');
+        this.wss.close();
+      }
+      if (this.httpServer) {
+        this.httpServer.close(() => {
+          console.log('[HTTP/WS Server] Stopped');
           resolve();
         });
       } else {

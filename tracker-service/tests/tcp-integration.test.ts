@@ -262,7 +262,8 @@ export async function runIntegrationTests(): Promise<{ passed: number; failed: n
       rawIo: {},
       status: 'Moving',
       isLiveHardware: true,
-      isUaeCorridor: true
+      isUaeCorridor: true,
+      hasGpsFix: true
     });
 
     // Broadcast update for a DIFFERENT vehicle (v-uae-9)
@@ -285,7 +286,8 @@ export async function runIntegrationTests(): Promise<{ passed: number; failed: n
       rawIo: {},
       status: 'Moving',
       isLiveHardware: true,
-      isUaeCorridor: true
+      isUaeCorridor: true,
+      hasGpsFix: true
     });
 
     await new Promise((r) => setTimeout(r, 100));

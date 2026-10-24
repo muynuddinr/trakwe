@@ -2,7 +2,8 @@ import {
   NormalizedTelemetry,
   DeviceConnectionHealth,
   TrackerRegistryEntry,
-  TcpConnectionState
+  TcpConnectionState,
+  DeviceConnectionStatus
 } from '../types';
 
 export interface ITrackingStore {
@@ -60,7 +61,9 @@ export class InMemoryTrackingStore implements ITrackingStore {
         imei: entry.imei,
         vehicleId: entry.vehicleId,
         vehicleName: entry.vehicleName,
+        registration: entry.registration,
         tcpState: 'Disconnected',
+        connectionStatus: 'Registered',
         remoteAddress: null,
         remotePort: null,
         connectedAt: null,
@@ -72,7 +75,8 @@ export class InMemoryTrackingStore implements ITrackingStore {
         totalPacketsReceived: 0,
         parserErrorCount: 0,
         lastError: null,
-        isStale: true
+        isStale: true,
+        hasGpsFix: false
       });
     }
   }
@@ -90,6 +94,15 @@ export class InMemoryTrackingStore implements ITrackingStore {
     return Boolean(dev && dev.enabled);
   }
 
+  private calculateConnectionStatus(health: DeviceConnectionHealth): DeviceConnectionStatus {
+    if (health.tcpState === 'Rejected') return 'Offline';
+    if (health.tcpState === 'Disconnected') return health.totalPacketsReceived > 0 ? 'Offline' : 'Registered';
+    if (health.isStale) return 'Stale';
+    if (!health.hasGpsFix) return 'No GPS fix';
+    if (health.totalPacketsReceived > 0) return 'Reporting';
+    return 'Connected';
+  }
+
   public updateConnectionState(
     imei: string,
     state: TcpConnectionState,
@@ -102,7 +115,9 @@ export class InMemoryTrackingStore implements ITrackingStore {
         imei,
         vehicleId: dev?.vehicleId || 'unknown',
         vehicleName: dev?.vehicleName || 'Unregistered Tracker',
+        registration: dev?.registration,
         tcpState: state,
+        connectionStatus: state === 'Authenticated' ? 'Connected' : (state === 'Rejected' ? 'Offline' : 'Registered'),
         remoteAddress: remoteInfo?.address || null,
         remotePort: remoteInfo?.port || null,
         connectedAt: state === 'Connected' || state === 'Authenticated' ? new Date().toISOString() : null,
@@ -114,7 +129,8 @@ export class InMemoryTrackingStore implements ITrackingStore {
         totalPacketsReceived: 0,
         parserErrorCount: 0,
         lastError: null,
-        isStale: true
+        isStale: true,
+        hasGpsFix: false
       };
       this.health.set(imei, health);
     } else {
@@ -126,6 +142,7 @@ export class InMemoryTrackingStore implements ITrackingStore {
       if (state === 'Connected' || state === 'Authenticated') {
         health.connectedAt = new Date().toISOString();
       }
+      health.connectionStatus = this.calculateConnectionStatus(health);
     }
   }
 
@@ -146,9 +163,11 @@ export class InMemoryTrackingStore implements ITrackingStore {
       health.lastAckHex = lastAckBuffer.toString('hex').toUpperCase();
       health.isStale = false;
 
-      if (latestTelemetry && (latestTelemetry.lat !== 0 || latestTelemetry.lng !== 0)) {
+      if (latestTelemetry && latestTelemetry.hasGpsFix && (latestTelemetry.lat !== 0 || latestTelemetry.lng !== 0)) {
         health.lastValidGps = latestTelemetry.deviceTimestamp;
+        health.hasGpsFix = true;
       }
+      health.connectionStatus = this.calculateConnectionStatus(health);
     }
   }
 
@@ -172,6 +191,7 @@ export class InMemoryTrackingStore implements ITrackingStore {
     } else {
       health.isStale = true;
     }
+    health.connectionStatus = this.calculateConnectionStatus(health);
 
     return health;
   }

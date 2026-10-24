@@ -23,8 +23,12 @@ async function bootstrap() {
     initialDevices: config.allowedDevices
   });
 
-  // 2. Initialize WebSocket Server
-  const wsServer = new TrackingWsServer(store, config.wsPort);
+  // 2. Initialize HTTP API & WebSocket Server
+  const wsServer = new TrackingWsServer(store, config.wsPort, {
+    staleThresholdSeconds: config.staleThresholdSeconds,
+    tcpHost: config.tcpHost,
+    tcpPort: config.tcpPort
+  });
   await wsServer.start();
 
   // 3. Initialize TCP Server

@@ -187,7 +187,8 @@ export class TeltonikaDecoder {
       rawIo,
       status,
       isLiveHardware: true,
-      isUaeCorridor: isUae
+      isUaeCorridor: isUae,
+      hasGpsFix: record.gps.isValid
     };
   }
 }

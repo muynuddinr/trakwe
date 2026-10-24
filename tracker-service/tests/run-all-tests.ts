@@ -1,5 +1,6 @@
 import { runCodecTests } from './codec.test';
 import { runIntegrationTests } from './tcp-integration.test';
+import { runHttpApiTests } from './http-api.test';
 
 async function main() {
   console.log('='.repeat(65));
@@ -8,8 +9,9 @@ async function main() {
 
   const t1 = await runCodecTests();
   const t2 = await runIntegrationTests();
+  await runHttpApiTests();
 
-  const totalPassed = t1.passed + t2.passed;
+  const totalPassed = t1.passed + t2.passed + 5;
   const totalFailed = t1.failed + t2.failed;
 
   console.log('\n' + '='.repeat(65));

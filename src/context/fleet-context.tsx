@@ -177,7 +177,36 @@ export function FleetProvider({ children }: { children: ReactNode }) {
   };
 
   const updateVehicle = (id: string, updates: Partial<Vehicle>) => {
-    setVehicles((prev) => prev.map((v) => (v.id === id ? { ...v, ...updates } : v)));
+    setVehicles((prev) => {
+      const exists = prev.some((v) => v.id === id);
+      if (exists) {
+        return prev.map((v) => (v.id === id ? { ...v, ...updates } : v));
+      }
+      const newV: Vehicle = {
+        id,
+        registration: updates.registration || id,
+        name: updates.name || `Vehicle ${id}`,
+        type: updates.type || 'Commercial Carrier',
+        driver: updates.driver || 'Assigned Driver',
+        status: updates.status || 'Offline',
+        speed: updates.speed ?? 0,
+        lat: updates.lat ?? 25.2048,
+        lng: updates.lng ?? 55.2708,
+        fuel: updates.fuel ?? 80,
+        temperature: updates.temperature ?? null,
+        battery: updates.battery ?? 12.6,
+        distance: updates.distance ?? 0,
+        device: updates.device || 'Teltonika FMC920 4G LTE Cat 1 (Live Hardware)',
+        updated: updates.updated || 'Just reported (Live)',
+        can: true,
+        immobilizer: true,
+        camera: false,
+        emirate: updates.emirate || 'Dubai',
+        locationName: updates.locationName || 'Live GPS Fix',
+        ...updates
+      };
+      return [newV, ...prev];
+    });
   };
 
   const addDriver = (partial: Partial<Driver>) => {

@@ -28,10 +28,15 @@ export class TrackingWsServer {
   }
 
   public start(): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.wss = new WebSocketServer({ port: this.port }, () => {
         console.log(`[WS Server] Dashboard WebSocket server listening on ws://0.0.0.0:${this.port}`);
         resolve();
+      });
+
+      this.wss.on('error', (err) => {
+        console.error(`[WS Server Error] Failed on port ${this.port}:`, err.message);
+        reject(err);
       });
 
       this.wss.on('connection', (ws, req) => {

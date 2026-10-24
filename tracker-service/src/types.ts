@@ -54,15 +54,26 @@ export interface NormalizedTelemetry {
   status: 'Moving' | 'Idle' | 'Offline';
   isLiveHardware: true;
   isUaeCorridor: boolean;
+  hasGpsFix: boolean;
 }
 
 export type TcpConnectionState = 'Disconnected' | 'Connecting' | 'Connected' | 'Authenticated' | 'Rejected';
+
+export type DeviceConnectionStatus =
+  | 'Registered'
+  | 'Connected'
+  | 'Reporting'
+  | 'Stale'
+  | 'Offline'
+  | 'No GPS fix';
 
 export interface DeviceConnectionHealth {
   imei: string;
   vehicleId: string;
   vehicleName: string;
+  registration?: string;
   tcpState: TcpConnectionState;
+  connectionStatus: DeviceConnectionStatus;
   remoteAddress: string | null;
   remotePort: number | null;
   connectedAt: string | null;
@@ -75,12 +86,14 @@ export interface DeviceConnectionHealth {
   parserErrorCount: number;
   lastError: string | null;
   isStale: boolean;
+  hasGpsFix: boolean;
 }
 
 export interface TrackerRegistryEntry {
   imei: string;
   vehicleId: string;
   vehicleName: string;
+  registration?: string;
   deviceModel: string;
   enabled: boolean;
   notes?: string;
@@ -97,7 +110,8 @@ export type WebSocketMessageType =
   | 'DEVICE_HEALTH_UPDATE'
   | 'DEVICE_REGISTRY'
   | 'CONNECTION_ACK'
-  | 'ERROR';
+  | 'ERROR'
+  | 'REGISTER_DEVICE';
 
 export interface WebSocketMessage<T = unknown> {
   type: WebSocketMessageType;

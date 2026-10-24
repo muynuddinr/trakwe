@@ -63,15 +63,32 @@ export interface Vehicle {
   gsmSignal?: number;
   isOutOfCorridor?: boolean;
   lastDeviceTimestamp?: string;
+  lastServerTimestamp?: string;
+  heading?: number;
+  altitude?: number;
+  satellites?: number;
+  hasGpsFix?: boolean;
+  rawIo?: Record<number, number | string>;
+  connectionStatus?: DeviceConnectionStatus;
 }
 
 export type TcpConnectionState = 'Disconnected' | 'Connecting' | 'Connected' | 'Authenticated' | 'Rejected';
+
+export type DeviceConnectionStatus =
+  | 'Registered'
+  | 'Connected'
+  | 'Reporting'
+  | 'Stale'
+  | 'Offline'
+  | 'No GPS fix';
 
 export interface DeviceConnectionHealth {
   imei: string;
   vehicleId: string;
   vehicleName: string;
+  registration?: string;
   tcpState: TcpConnectionState;
+  connectionStatus: DeviceConnectionStatus;
   remoteAddress: string | null;
   remotePort: number | null;
   connectedAt: string | null;
@@ -84,6 +101,17 @@ export interface DeviceConnectionHealth {
   parserErrorCount: number;
   lastError: string | null;
   isStale: boolean;
+  hasGpsFix: boolean;
+}
+
+export interface TrackerRegistryEntry {
+  imei: string;
+  vehicleId: string;
+  vehicleName: string;
+  registration?: string;
+  deviceModel: string;
+  enabled: boolean;
+  notes?: string;
 }
 
 export type RecordItem = {

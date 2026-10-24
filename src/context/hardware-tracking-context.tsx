@@ -87,6 +87,12 @@ export function HardwareTrackingProvider({ children }: { children: ReactNode }) 
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isConnectingRef = useRef(false);
 
+  const userRef = useRef(user);
+  userRef.current = user;
+
+  const updateVehicleRef = useRef(updateVehicle);
+  updateVehicleRef.current = updateVehicle;
+
   const applyTelemetryToFleet = useCallback((telemetry: NormalizedHardwareTelemetry) => {
     setLatestTelemetryByVehicle((prev) => ({
       ...prev,
@@ -100,7 +106,7 @@ export function HardwareTrackingProvider({ children }: { children: ReactNode }) 
     const effectiveLat = hasCoordinates ? telemetry.lat : 25.2048;
     const effectiveLng = hasCoordinates ? telemetry.lng : 55.2708;
 
-    updateVehicle(telemetry.vehicleId, {
+    updateVehicleRef.current(telemetry.vehicleId, {
       lat: effectiveLat,
       lng: effectiveLng,
       speed: telemetry.speed,
@@ -131,7 +137,7 @@ export function HardwareTrackingProvider({ children }: { children: ReactNode }) 
             : `Reported GPS (${telemetry.lat.toFixed(4)}, ${telemetry.lng.toFixed(4)})`)
         : 'Indoor Telematics / GPS Acquiring Satellites (Standby)'
     });
-  }, [updateVehicle]);
+  }, []);
 
   // Initial HTTP fetch and offline polling recovery
   const fetchLiveTelemetry = useCallback(async () => {
@@ -142,8 +148,8 @@ export function HardwareTrackingProvider({ children }: { children: ReactNode }) 
       const headers: Record<string, string> = {
         'Accept': 'application/json'
       };
-      if (user?.role) headers['x-user-role'] = user.role;
-      if (user?.assignedVehicleId) headers['x-vehicle-id'] = user.assignedVehicleId;
+      if (userRef.current?.role) headers['x-user-role'] = userRef.current.role;
+      if (userRef.current?.assignedVehicleId) headers['x-vehicle-id'] = userRef.current.assignedVehicleId;
 
       const [vehiclesRes, healthRes] = await Promise.all([
         fetch(`${apiBase}/api/live/vehicles`, { headers }).catch(() => null),
@@ -164,7 +170,7 @@ export function HardwareTrackingProvider({ children }: { children: ReactNode }) 
         if (Array.isArray(healthData.devices)) {
           setDeviceHealthList(healthData.devices);
           for (const h of healthData.devices) {
-            updateVehicle(h.vehicleId, {
+            updateVehicleRef.current(h.vehicleId, {
               connectionStatus: h.connectionStatus,
               isLiveHardware: true,
               liveImei: h.imei
@@ -175,7 +181,7 @@ export function HardwareTrackingProvider({ children }: { children: ReactNode }) 
     } catch (err) {
       // Non-blocking catch
     }
-  }, [user, applyTelemetryToFleet, updateVehicle]);
+  }, [applyTelemetryToFleet]);
 
   const connect = useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -201,9 +207,9 @@ export function HardwareTrackingProvider({ children }: { children: ReactNode }) 
         // 1. Authenticate with current user role and vehicle assignment
         ws.send(JSON.stringify({
           type: 'AUTH',
-          role: user?.role || 'Admin',
-          assignedVehicleId: user?.assignedVehicleId || 'v-dxb-01',
-          userId: user?.id
+          role: userRef.current?.role || 'Admin',
+          assignedVehicleId: userRef.current?.assignedVehicleId || 'v-dxb-01',
+          userId: userRef.current?.id
         }));
 
         // 2. Refresh initial state from HTTP API to recover any updates
@@ -221,7 +227,7 @@ export function HardwareTrackingProvider({ children }: { children: ReactNode }) 
             const healthList: DeviceConnectionHealth[] = Array.isArray(msg.payload) ? msg.payload : [];
             setDeviceHealthList(healthList);
             for (const h of healthList) {
-              updateVehicle(h.vehicleId, {
+              updateVehicleRef.current(h.vehicleId, {
                 connectionStatus: h.connectionStatus
               });
             }
@@ -249,9 +255,9 @@ export function HardwareTrackingProvider({ children }: { children: ReactNode }) 
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = setTimeout(connect, 5000);
     }
-  }, [user, fetchLiveTelemetry, applyTelemetryToFleet, updateVehicle]);
+  }, [fetchLiveTelemetry, applyTelemetryToFleet]);
 
-  // Initial connection and cleanup
+  // Initial connection and cleanup - mount once
   useEffect(() => {
     connect();
 
@@ -262,7 +268,7 @@ export function HardwareTrackingProvider({ children }: { children: ReactNode }) 
         socketRef.current = null;
       }
     };
-  }, [connect]);
+  }, []);
 
   // HTTP polling fallback when WebSocket is temporarily disconnected
   useEffect(() => {

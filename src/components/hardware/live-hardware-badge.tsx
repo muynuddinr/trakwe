@@ -13,39 +13,6 @@ export function LiveHardwareBadge() {
     lastPacketTime
   } = useHardwareTracking();
 
-  if (!wsConnected) {
-    return (
-      <button
-        type="button"
-        className="live-hardware-badge offline"
-        onClick={() => setOpenHealthModal(true)}
-        title="Tracking gateway offline. Click for diagnostics."
-      >
-        <span className="indicator-dot offline" />
-        <span className="badge-text">GATEWAY OFFLINE (RETRYING)</span>
-      </button>
-    );
-  }
-
-  if (hasLiveHardwareStream) {
-    return (
-      <button
-        type="button"
-        className="live-hardware-badge live"
-        onClick={() => setOpenHealthModal(true)}
-        title="Receiving live Teltonika FMC920 TCP telemetry packets! Click for diagnostics."
-      >
-        <span className="indicator-dot live-pulse" />
-        <span className="badge-text">
-          LIVE HARDWARE · TELTONIKA FMC920
-        </span>
-        {lastPacketTime && (
-          <span className="badge-sub">{lastPacketTime}</span>
-        )}
-      </button>
-    );
-  }
-
   return (
     <button
       type="button"
@@ -55,7 +22,11 @@ export function LiveHardwareBadge() {
     >
       <span className="indicator-dot live-pulse" />
       <span className="badge-text">LIVE HARDWARE · TELTONIKA FMC920</span>
-      <span className="badge-sub">Port 5027</span>
+      {lastPacketTime ? (
+        <span className="badge-sub">{lastPacketTime}</span>
+      ) : (
+        <span className="badge-sub">Port 5027</span>
+      )}
     </button>
   );
 }

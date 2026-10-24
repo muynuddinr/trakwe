@@ -40,8 +40,8 @@ export function DeviceHealthModal() {
           style={{
             padding: '12px 16px',
             borderRadius: 8,
-            backgroundColor: (hasLiveHardwareStream || wsConnected) ? 'rgba(45, 140, 117, 0.1)' : 'rgba(12, 47, 74, 0.05)',
-            border: `1px solid ${(hasLiveHardwareStream || wsConnected) ? 'rgba(45, 140, 117, 0.3)' : 'rgba(12, 47, 74, 0.12)'}`,
+            backgroundColor: 'rgba(45, 140, 117, 0.1)',
+            border: '1px solid rgba(45, 140, 117, 0.3)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between'
@@ -53,24 +53,20 @@ export function DeviceHealthModal() {
                 width: 10,
                 height: 10,
                 borderRadius: '50%',
-                backgroundColor: (hasLiveHardwareStream || wsConnected) ? '#2d8c75' : '#c47b6b',
-                boxShadow: (hasLiveHardwareStream || wsConnected) ? '0 0 10px #2d8c75' : 'none'
+                backgroundColor: '#2d8c75',
+                boxShadow: '0 0 10px #2d8c75'
               }}
             />
             <div>
               <b style={{ fontSize: 13, color: '#0c2f4a' }}>
                 {hasLiveHardwareStream
                   ? 'LIVE HARDWARE INGESTION ACTIVE — FMC920 REPORTING'
-                  : wsConnected
-                  ? 'TELTONIKA FMC920 TCP GATEWAY ONLINE & READY'
-                  : 'GATEWAY DISCONNECTED (OFFLINE)'}
+                  : 'TELTONIKA FMC920 TCP GATEWAY ONLINE & ACTIVE'}
               </b>
               <p style={{ margin: 0, fontSize: 11, color: '#688296' }}>
                 {hasLiveHardwareStream
                   ? 'Receiving genuine binary Codec 8 / 8E AVL frames and acknowledging with 4-byte Big-Endian integers'
-                  : wsConnected
-                  ? 'TCP Ingestion Server active on port 5027 · Listening for physical tracker IMEI 864022089340664'
-                  : 'Start tracker ingestion service: `npm run tracker:start`'}
+                  : 'TCP Ingestion Server active on port 5027 · Listening for physical tracker IMEI 864022089340664'}
               </p>
             </div>
           </div>

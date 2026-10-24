@@ -234,7 +234,7 @@ export function FleetProvider({ children }: { children: ReactNode }) {
     setVehicles((prev) => [newVehicle, ...prev]);
   };
 
-  const updateVehicle = (id: string, updates: Partial<Vehicle>) => {
+  const updateVehicle = React.useCallback((id: string, updates: Partial<Vehicle>) => {
     setVehicles((prev) => {
       const exists = prev.some((v) => v.id === id);
       if (exists) {
@@ -265,7 +265,7 @@ export function FleetProvider({ children }: { children: ReactNode }) {
       };
       return [newV, ...prev];
     });
-  };
+  }, []);
 
   const addDriver = (partial: Partial<Driver>) => {
     const newDriver: Driver = {

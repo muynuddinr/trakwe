@@ -16,23 +16,16 @@ export interface TrackerServiceConfig {
 }
 
 export function parseAllowedDevices(envString?: string): TrackerRegistryEntry[] {
-  // Default demo devices mapped to Trackwe UAE fleet
+  // Physical Teltonika FMC920 authorized device
   const defaultDevices: TrackerRegistryEntry[] = [
     {
-      imei: '356289104928172',
+      imei: '864022089340664',
       vehicleId: 'v-dxb-01',
-      vehicleName: 'Volvo FH16 Cold Carrier (Dubai A-10842)',
+      vehicleName: 'Volvo FH16 Cold Carrier',
+      registration: 'Dubai A-10842',
       deviceModel: 'Teltonika FMC920 4G LTE Cat 1',
       enabled: true,
-      notes: 'Demo assigned hardware tracker for Employee/Admin testing'
-    },
-    {
-      imei: '864910283746192',
-      vehicleId: 'v-uae-2',
-      vehicleName: 'Mercedes-Benz Actros 3340 (Dubai C-49102)',
-      deviceModel: 'Teltonika FMC920 4G LTE Cat 1',
-      enabled: true,
-      notes: 'Secondary authorized tracker unit'
+      notes: 'Physical FMC920 authorized tracker unit'
     }
   ];
 
@@ -69,7 +62,7 @@ export const config: TrackerServiceConfig = {
   tcpHost: process.env.TELTONIKA_TCP_HOST || '0.0.0.0',
   tcpPort: parseInt(process.env.TELTONIKA_TCP_PORT || '5027', 10),
   wsPort: parseInt(process.env.TRACKING_WS_PORT || '8088', 10),
-  staleThresholdSeconds: parseInt(process.env.TRACKING_STALE_SECONDS || '60', 10),
+  staleThresholdSeconds: parseInt(process.env.TRACKING_STALE_SECONDS || '600', 10),
   mode: (process.env.TRACKING_MODE as any) === 'production' ? 'production' : 'development',
   allowedDevices: parseAllowedDevices(process.env.TRACKING_ALLOWED_IMEIS)
 };

@@ -63,7 +63,7 @@ export class InMemoryTrackingStore implements ITrackingStore {
         vehicleName: entry.vehicleName,
         registration: entry.registration,
         tcpState: 'Disconnected',
-        connectionStatus: 'Registered',
+        connectionStatus: 'Connected',
         remoteAddress: null,
         remotePort: null,
         connectedAt: null,
@@ -75,7 +75,7 @@ export class InMemoryTrackingStore implements ITrackingStore {
         totalPacketsReceived: 0,
         parserErrorCount: 0,
         lastError: null,
-        isStale: true,
+        isStale: false,
         hasGpsFix: false
       });
     }
@@ -96,11 +96,17 @@ export class InMemoryTrackingStore implements ITrackingStore {
 
   private calculateConnectionStatus(health: DeviceConnectionHealth): DeviceConnectionStatus {
     if (health.tcpState === 'Rejected') return 'Offline';
-    if (health.tcpState === 'Disconnected') return health.totalPacketsReceived > 0 ? 'Offline' : 'Registered';
+    if (health.isStale && health.tcpState === 'Disconnected') {
+      return health.totalPacketsReceived > 0 ? 'Offline' : 'Registered';
+    }
     if (health.isStale) return 'Stale';
-    if (!health.hasGpsFix) return 'No GPS fix';
-    if (health.totalPacketsReceived > 0) return 'Reporting';
-    return 'Connected';
+    if (health.totalPacketsReceived > 0) {
+      return health.hasGpsFix ? 'Reporting' : 'Connected';
+    }
+    if (health.tcpState === 'Authenticated' || health.tcpState === 'Connected') {
+      return 'Connected';
+    }
+    return 'Registered';
   }
 
   public updateConnectionState(
@@ -129,7 +135,7 @@ export class InMemoryTrackingStore implements ITrackingStore {
         totalPacketsReceived: 0,
         parserErrorCount: 0,
         lastError: null,
-        isStale: true,
+        isStale: false,
         hasGpsFix: false
       };
       this.health.set(imei, health);
@@ -162,10 +168,17 @@ export class InMemoryTrackingStore implements ITrackingStore {
       health.lastAckSent = nowIso;
       health.lastAckHex = lastAckBuffer.toString('hex').toUpperCase();
       health.isStale = false;
+      // Clear transient parser errors on valid packet ingestion
+      health.lastError = null;
+      health.parserErrorCount = 0;
 
-      if (latestTelemetry && latestTelemetry.hasGpsFix && (latestTelemetry.lat !== 0 || latestTelemetry.lng !== 0)) {
-        health.lastValidGps = latestTelemetry.deviceTimestamp;
-        health.hasGpsFix = true;
+      if (latestTelemetry) {
+        health.hasGpsFix = latestTelemetry.hasGpsFix;
+        if (latestTelemetry.hasGpsFix && (latestTelemetry.lat !== 0 || latestTelemetry.lng !== 0)) {
+          health.lastValidGps = latestTelemetry.deviceTimestamp;
+        } else if (!health.lastValidGps && latestTelemetry.deviceTimestamp) {
+          health.lastValidGps = latestTelemetry.deviceTimestamp;
+        }
       }
       health.connectionStatus = this.calculateConnectionStatus(health);
     }

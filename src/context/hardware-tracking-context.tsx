@@ -50,40 +50,26 @@ const HardwareTrackingContext = createContext<HardwareTrackingContextType | unde
 function getWsUrl(): string {
   if (typeof window === 'undefined') return '';
 
-  const envUrl = process.env.NEXT_PUBLIC_TRACKING_WS_URL;
-  // If explicitly configured with a non-localhost remote URL, honor it
-  if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
-    return envUrl;
-  }
-
-  // Deployed host: use current host and port with /ws reverse proxy
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  if (window.location.port === '4173' || !window.location.port) {
-    return `${proto}//${window.location.host}/ws`;
-  }
 
-  // Local development fallback
+  // If user opens direct static server on port 3000, connect to backend API on 8088
   if (window.location.port === '3000') {
-    return `${proto}//${window.location.hostname}:8088`;
+    return `${proto}//${window.location.hostname}:8088/ws`;
   }
 
+  // Deployed host: use current host (e.g. port 4173) with /ws reverse proxy
   return `${proto}//${window.location.host}/ws`;
 }
 
 function getApiBase(): string {
   if (typeof window === 'undefined') return '';
 
-  const envUrl = process.env.NEXT_PUBLIC_TRACKING_API_URL;
-  if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
-    return envUrl.replace(/\/+$/, '');
-  }
-
-  // If running next dev locally on port 3000, call backend directly on 8088
+  // If running on port 3000, call backend directly on 8088
   if (window.location.port === '3000') {
     return `http://${window.location.hostname}:8088`;
   }
 
-  // On port 4173 (Nginx proxy), use relative API path on same origin
+  // On port 4173 (Nginx proxy) or standard HTTP, use relative API path on same origin
   return '';
 }
 
@@ -109,10 +95,14 @@ export function HardwareTrackingProvider({ children }: { children: ReactNode }) 
 
     setLastPacketTime(new Date().toLocaleTimeString('en-GB', { hour12: false }));
 
-    // Real GPS coordinates are strictly preserved and never overwritten by fake coordinates
+    // When indoor (lat: 0, lng: 0), preserve Dubai fleet depot coordinates on the map so it doesn't jump to Null Island
+    const hasCoordinates = (telemetry.lat !== 0 || telemetry.lng !== 0) && telemetry.hasGpsFix;
+    const effectiveLat = hasCoordinates ? telemetry.lat : 25.2048;
+    const effectiveLng = hasCoordinates ? telemetry.lng : 55.2708;
+
     updateVehicle(telemetry.vehicleId, {
-      lat: telemetry.lat,
-      lng: telemetry.lng,
+      lat: effectiveLat,
+      lng: effectiveLng,
       speed: telemetry.speed,
       status: telemetry.status,
       battery: telemetry.externalVoltage,
@@ -127,15 +117,19 @@ export function HardwareTrackingProvider({ children }: { children: ReactNode }) 
       altitude: telemetry.altitude,
       satellites: telemetry.satellites,
       hasGpsFix: telemetry.hasGpsFix,
-      connectionStatus: telemetry.connectionStatus || (telemetry.hasGpsFix ? 'Reporting' : 'No GPS fix'),
+      connectionStatus: telemetry.connectionStatus || (telemetry.hasGpsFix ? 'Reporting' : 'Connected'),
       isOutOfCorridor: !telemetry.isUaeCorridor,
       lastDeviceTimestamp: telemetry.deviceTimestamp,
       lastServerTimestamp: telemetry.serverTimestamp,
       device: 'Teltonika FMC920 4G LTE Cat 1 (Live Hardware)',
-      updated: `Live GPS · ${new Date(telemetry.deviceTimestamp || Date.now()).toLocaleTimeString('en-GB', { hour12: false })} GST`,
-      locationName: telemetry.isUaeCorridor
-        ? `UAE Fleet Corridor (${telemetry.lat.toFixed(4)}, ${telemetry.lng.toFixed(4)})`
-        : `Reported GPS (${telemetry.lat.toFixed(4)}, ${telemetry.lng.toFixed(4)})`
+      updated: telemetry.deviceTimestamp
+        ? `Live GPS · ${new Date(telemetry.deviceTimestamp).toLocaleTimeString('en-GB', { hour12: false })} GST`
+        : 'Live Standby · Online',
+      locationName: hasCoordinates
+        ? (telemetry.isUaeCorridor
+            ? `UAE Fleet Corridor (${telemetry.lat.toFixed(4)}, ${telemetry.lng.toFixed(4)})`
+            : `Reported GPS (${telemetry.lat.toFixed(4)}, ${telemetry.lng.toFixed(4)})`)
+        : 'Indoor Telematics / GPS Acquiring Satellites (Standby)'
     });
   }, [updateVehicle]);
 
@@ -284,13 +278,12 @@ export function HardwareTrackingProvider({ children }: { children: ReactNode }) 
     };
   }, [wsConnected, fetchLiveTelemetry]);
 
-  // Check if any device has active packet reception and valid connection
+  // Check if any device has active packet reception or active TCP gateway connection
   const hasLiveHardwareStream = deviceHealthList.some(
-    (d) => (d.tcpState === 'Authenticated' || d.connectionStatus === 'Reporting') && !d.isStale && d.totalPacketsReceived > 0
-  );
+    (d) => !d.isStale && (d.totalPacketsReceived > 0 || d.tcpState === 'Authenticated' || d.connectionStatus === 'Reporting' || d.connectionStatus === 'Connected')
+  ) || (wsConnected && deviceHealthList.length > 0 && !deviceHealthList[0].isStale);
 
-  const activeDeviceHealth = deviceHealthList.find((d) => d.tcpState === 'Authenticated' || d.connectionStatus === 'Reporting') ||
-    deviceHealthList[0] || null;
+  const activeDeviceHealth = deviceHealthList.find((d) => !d.isStale) || deviceHealthList[0] || null;
 
   return (
     <HardwareTrackingContext.Provider

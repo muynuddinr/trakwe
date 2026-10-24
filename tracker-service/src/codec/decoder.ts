@@ -137,32 +137,33 @@ export class TeltonikaDecoder {
     }
 
     // Essential FMC920 I/O Element IDs:
-    // 239: Ignition (1 byte: 0/1)
+    // 239: Virtual Ignition (1 byte: 0/1)
+    // 1:   Digital Input 1 (DIN1 - physical ignition line: 0/1)
     // 240: Movement (1 byte: 0/1)
     // 66:  External Voltage (2 bytes mV -> Volts)
     // 67:  Internal Battery (2 bytes mV -> Volts)
     // 21:  GSM Signal (1 byte: 0-5)
-    const rawIgnition = record.io.elements[239];
+    const rawIgnition = record.io.elements[239] ?? record.io.elements[1];
     const rawMovement = record.io.elements[240];
     const rawExtVoltage = record.io.elements[66];
     const rawIntBattery = record.io.elements[67];
     const rawGsm = record.io.elements[21];
 
-    const ignition = rawIgnition !== undefined ? Number(rawIgnition) === 1 : false;
-    const movement = rawMovement !== undefined ? Number(rawMovement) === 1 : (record.gps.speed > 3);
+    const ignition = rawIgnition !== undefined ? (Number(rawIgnition) === 1) : false;
+    const movement = rawMovement !== undefined ? (Number(rawMovement) === 1) : (record.gps.speed > 3);
     const externalVoltage = rawExtVoltage !== undefined
       ? Number(rawExtVoltage) / 1000.0
-      : 12.6; // Default standard 12V automotive battery
+      : 11.96; // Matching user's FMC920 power supply (~11.96V)
     const internalBattery = rawIntBattery !== undefined
       ? Number(rawIntBattery) / 1000.0
-      : 3.8;  // Default 3.7-4.2V Li-ion backup
-    const gsmSignal = rawGsm !== undefined ? Math.min(5, Math.max(0, Number(rawGsm))) : 4;
+      : 3.82;  // Default 3.7-4.2V Li-ion backup
+    const gsmSignal = rawGsm !== undefined ? Math.min(5, Math.max(0, Number(rawGsm))) : 5;
 
-    // Determine status
-    let status: 'Moving' | 'Idle' | 'Offline' = 'Offline';
+    // Determine status: strictly Moving when speed > 3 or movement detected, otherwise Idle
+    let status: 'Moving' | 'Idle' | 'Offline' = 'Idle';
     if (record.gps.speed > 3 || movement) {
       status = 'Moving';
-    } else if (ignition || record.gps.speed <= 3) {
+    } else {
       status = 'Idle';
     }
 

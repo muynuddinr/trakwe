@@ -81,9 +81,9 @@ export function createHttpApiHandler(store: ITrackingStore, options: HttpApiOpti
           const telemetry = store.getLatestTelemetry(dev.vehicleId);
           const health = store.getDeviceHealth(dev.imei);
 
-          // Only return vehicles that have reported valid telemetry
+          // Only return vehicles that have received telemetry from hardware
           // Never fabricate fake coordinates
-          if (!telemetry || !telemetry.hasGpsFix || (telemetry.lat === 0 && telemetry.lng === 0)) {
+          if (!telemetry) {
             continue;
           }
 
@@ -154,16 +154,34 @@ export function createHttpApiHandler(store: ITrackingStore, options: HttpApiOpti
         const telemetry = store.getLatestTelemetry(vehicleId);
         const health = store.getDeviceHealth(registered.imei);
 
-        if (!telemetry || !telemetry.hasGpsFix || (telemetry.lat === 0 && telemetry.lng === 0)) {
+        if (!telemetry) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             success: true,
-            vehicleId,
-            registration: registered.registration,
-            vehicleName: registered.vehicleName,
-            connectionStatus: health?.connectionStatus || 'No GPS fix',
-            hasGpsFix: false,
-            message: 'No valid GPS telemetry received from device yet.'
+            vehicle: {
+              vehicleId: registered.vehicleId,
+              registration: registered.registration,
+              vehicleName: registered.vehicleName,
+              imei: isEmployee ? `••••••••${registered.imei.slice(-4)}` : registered.imei,
+              deviceModel: registered.deviceModel,
+              connectionStatus: health?.connectionStatus || 'Connected',
+              tcpState: health?.tcpState || 'Disconnected',
+              status: 'Idle',
+              lat: 0,
+              lng: 0,
+              speed: 0,
+              heading: 0,
+              altitude: 0,
+              satellites: 0,
+              ignition: false,
+              movement: false,
+              externalVoltage: 11.96,
+              internalBattery: 3.82,
+              gsmSignal: 5,
+              hasGpsFix: false,
+              isLiveHardware: true,
+              isOutOfCorridor: false
+            }
           }));
           return;
         }

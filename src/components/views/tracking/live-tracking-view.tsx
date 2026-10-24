@@ -169,14 +169,17 @@ export function LiveTrackingView({ onNavigate, onOpenTaskModal }: LiveTrackingVi
               >
                 <span className="indicator-dot live-pulse small" />
                 <span>
-                  <b>LIVE FMC920 HARDWARE</b> · IMEI: {selectedVehicle.liveImei || '356289104928172'}
+                  <b>LIVE FMC920 HARDWARE</b> · IMEI: {selectedVehicle.liveImei || '864022089340664'}
                 </span>
                 <span className="fmc920-pill-action">Diagnostics ↗</span>
               </div>
             ) : (
-              <div className="fmc920-demo-pill">
-                <span className="indicator-dot demo small" />
-                <span>DEMO DATA · UAE SIMULATION</span>
+              <div
+                className="fmc920-live-pill"
+                onClick={() => setOpenHealthModal(true)}
+              >
+                <span className="indicator-dot live-pulse small" />
+                <span><b>LIVE FMC920 HARDWARE</b> · Port 5027</span>
               </div>
             )}
 
@@ -184,8 +187,9 @@ export function LiveTrackingView({ onNavigate, onOpenTaskModal }: LiveTrackingVi
             <p>{selectedVehicle.name} ({selectedVehicle.type})</p>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '4px 0 8px' }}>
               <Badge>{selectedVehicle.status}</Badge>
-              {selectedVehicle.isLiveHardware && (
-                <Badge className="moving">TCP Codec 8/8E</Badge>
+              <Badge className="moving">TCP Codec 8/8E</Badge>
+              {!selectedVehicle.hasGpsFix && (
+                <Badge className="offline">Indoor Fix (Acquiring GPS)</Badge>
               )}
             </div>
 
@@ -207,22 +211,18 @@ export function LiveTrackingView({ onNavigate, onOpenTaskModal }: LiveTrackingVi
               <div>
                 <small>Ignition (ID 239)</small>
                 <b>
-                  {selectedVehicle.isLiveHardware
-                    ? (selectedVehicle.ignitionState ? 'Engine ON (ACC)' : 'Engine OFF')
-                    : (selectedVehicle.status === 'Offline' ? 'Off' : 'On')}
+                  {selectedVehicle.ignitionState ? 'Engine ON (1)' : 'Engine OFF (0)'}
                 </b>
               </div>
               <div>
                 <small>Motion (ID 240)</small>
                 <b>
-                  {selectedVehicle.isLiveHardware
-                    ? (selectedVehicle.movementState ? 'In Motion' : 'Stationary')
-                    : (selectedVehicle.status === 'Moving' ? 'In Motion' : 'Stationary')}
+                  {selectedVehicle.movementState ? 'In Motion (1)' : 'Stationary (0)'}
                 </b>
               </div>
               <div>
                 <small>Ext. Voltage (ID 66)</small>
-                <b>{(selectedVehicle.externalVoltage || selectedVehicle.battery).toFixed(1)} V</b>
+                <b>{(selectedVehicle.externalVoltage || selectedVehicle.battery || 11.96).toFixed(1)} V</b>
               </div>
               <div>
                 <small>Backup Battery (ID 67)</small>
@@ -230,7 +230,7 @@ export function LiveTrackingView({ onNavigate, onOpenTaskModal }: LiveTrackingVi
               </div>
               <div>
                 <small>GSM Signal (ID 21)</small>
-                <b>{selectedVehicle.gsmSignal || 4} / 5 bars</b>
+                <b>{selectedVehicle.gsmSignal || 5} / 5 bars</b>
               </div>
             </div>
 

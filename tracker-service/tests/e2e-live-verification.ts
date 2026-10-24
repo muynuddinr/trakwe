@@ -1,7 +1,7 @@
 import net from 'net';
 import http from 'http';
-import { calculateTeltonikaCrc16 } from './tracker-service/src/codec/crc16';
-import { Codec8Decoder } from './tracker-service/src/codec/codec8';
+import { calculateTeltonikaCrc16 } from '../src/codec/crc16';
+import { Codec8Decoder } from '../src/codec/codec8';
 
 const HOST = '50.62.182.143';
 const TCP_PORT = 5027;

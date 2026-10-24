@@ -242,24 +242,20 @@ export function VehicleDetailView({
                 <span className="fmc-code">I/O ID 239</span>
                 <span className="fmc-label">Ignition (ACC)</span>
                 <b className={vehicle.ignitionState ? 'status-on' : ''}>
-                  {vehicle.isLiveHardware
-                    ? (vehicle.ignitionState ? 'Engine ON (1)' : 'Engine OFF (0)')
-                    : (vehicle.status === 'Offline' ? 'Engine OFF' : 'Engine ON (1)')}
+                  {vehicle.ignitionState ? 'Engine ON (1)' : 'Engine OFF (0)'}
                 </b>
               </div>
               <div className="fmc-item">
                 <span className="fmc-code">I/O ID 240</span>
                 <span className="fmc-label">Movement State</span>
                 <b className={vehicle.movementState ? 'status-on' : ''}>
-                  {vehicle.isLiveHardware
-                    ? (vehicle.movementState ? 'In Motion (1)' : 'Stationary (0)')
-                    : (vehicle.status === 'Moving' ? 'In Motion (1)' : 'Stationary (0)')}
+                  {vehicle.movementState ? 'In Motion (1)' : 'Stationary (0)'}
                 </b>
               </div>
               <div className="fmc-item">
                 <span className="fmc-code">I/O ID 66</span>
                 <span className="fmc-label">External Main Battery</span>
-                <b>{(vehicle.externalVoltage || vehicle.battery).toFixed(2)} V</b>
+                <b>{(vehicle.externalVoltage || vehicle.battery || 11.96).toFixed(2)} V</b>
               </div>
               <div className="fmc-item">
                 <span className="fmc-code">I/O ID 67</span>
@@ -269,12 +265,12 @@ export function VehicleDetailView({
               <div className="fmc-item">
                 <span className="fmc-code">I/O ID 21</span>
                 <span className="fmc-label">GSM Signal Strength</span>
-                <b>{vehicle.gsmSignal || 4} / 5 bars</b>
+                <b>{vehicle.gsmSignal || 5} / 5 bars</b>
               </div>
               <div className="fmc-item">
                 <span className="fmc-code">DEVICE IMEI</span>
                 <span className="fmc-label">Authorized Hardware</span>
-                <b style={{ fontFamily: 'monospace', fontSize: 12 }}>{vehicle.liveImei || '356289104928172'}</b>
+                <b style={{ fontFamily: 'monospace', fontSize: 12 }}>{vehicle.liveImei || '864022089340664'}</b>
               </div>
             </div>
             {vehicle.isOutOfCorridor && (

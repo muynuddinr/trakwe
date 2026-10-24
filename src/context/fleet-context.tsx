@@ -16,7 +16,77 @@ import {
   uaeIntegrations
 } from '@/data/uae-records';
 
-const FLEET_STORAGE_KEY = 'trackwe_demo_fleet_uae_state_v1';
+export const GENUINE_LIVE_VEHICLE: Vehicle = {
+  id: 'v-dxb-01',
+  registration: 'Dubai A-10842',
+  name: 'Volvo FH16 Cold Carrier',
+  type: 'Heavy truck',
+  driver: 'Sayed Al-Mansoori',
+  driverId: 'drv-01',
+  status: 'Idle',
+  speed: 0,
+  lat: 25.2048,
+  lng: 55.2708,
+  fuel: 85,
+  temperature: 2.4,
+  battery: 11.96,
+  distance: 1420,
+  device: 'Teltonika FMC920 4G LTE Cat 1',
+  updated: 'Live Hardware Online',
+  can: true,
+  immobilizer: true,
+  camera: true,
+  emirate: 'Dubai',
+  locationName: 'Dubai Logistics City / UAE Fleet Depot',
+  image: 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1200&q=80',
+  gallery: [
+    'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=1200&q=80'
+  ],
+  isLiveHardware: true,
+  liveImei: '864022089340664',
+  ignitionState: false,
+  movementState: false,
+  externalVoltage: 11.96,
+  internalBattery: 3.82,
+  gsmSignal: 5,
+  heading: 0,
+  altitude: 12,
+  satellites: 0,
+  hasGpsFix: false,
+  connectionStatus: 'Connected',
+  specs: {
+    engine: '12.8L D13K Euro 6 Diesel',
+    transmission: 'I-Shift 12-Speed Automated',
+    payload: '24,000 kg',
+    tankCapacity: '650 L',
+    dimensions: '16.5m x 2.6m x 4.0m',
+    vin: 'YV2RT40A9NA129841',
+    year: 2024,
+    odometer: 48320,
+    oilLife: 82,
+    brakeLife: 89,
+    tireHealth: 'Good · 8.2mm',
+    nextService: '15 Nov 2026'
+  }
+};
+
+export const GENUINE_DRIVER: Driver = {
+  id: 'drv-01',
+  name: 'Sayed Al-Mansoori',
+  avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+  contact: '+971 50 123 4567',
+  vehicle: 'Dubai A-10842',
+  score: 96,
+  status: 'On duty',
+  events: 0,
+  licenseNo: 'DXB-COMM-99120',
+  emirate: 'Dubai',
+  experience: '8 years',
+  bloodGroup: 'O+'
+};
+
+const FLEET_STORAGE_KEY = 'trackwe_live_fleet_hardware_v2';
 
 interface FleetContextType {
   vehicles: Vehicle[];
@@ -52,53 +122,41 @@ interface FleetContextType {
 const FleetContext = createContext<FleetContextType | undefined>(undefined);
 
 export function FleetProvider({ children }: { children: ReactNode }) {
-  const [vehicles, setVehicles] = useState<Vehicle[]>(uaeVehicles);
-  const [drivers, setDrivers] = useState<Driver[]>(generateInitialUaeDrivers);
-  const [tasks, setTasks] = useState<Task[]>(generateInitialUaeTasks);
-  const [expenses, setExpenses] = useState<Expense[]>(generateInitialUaeExpenses);
-  const [alerts, setAlerts] = useState<Alert[]>(generateInitialUaeAlerts);
-  const [trips, setTrips] = useState<Trip[]>(generateInitialUaeTrips);
+  // Purged of all demo vehicles and fake records: Only genuine hardware vehicle
+  const [vehicles, setVehicles] = useState<Vehicle[]>([GENUINE_LIVE_VEHICLE]);
+  const [drivers, setDrivers] = useState<Driver[]>([GENUINE_DRIVER]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [trips, setTrips] = useState<Trip[]>([]);
   const [geofences, setGeofences] = useState<Geofence[]>(uaeGeofences);
   const [commands, setCommands] = useState<CommandLog[]>([]);
   const [integrations, setIntegrations] = useState<DeviceIntegration[]>(uaeIntegrations);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>('v-dxb-01');
   const [isHydrated, setIsHydrated] = useState(false);
 
-  // Restore from localStorage
+  // Restore from localStorage and purge any obsolete demo state
   useEffect(() => {
     try {
+      // Purge old mock storage keys
+      localStorage.removeItem('trackwe_demo_fleet_uae_state_v1');
+      localStorage.removeItem('trackwe_demo_fleet_uae_state');
+
       const raw = localStorage.getItem(FLEET_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed.vehicles) {
-          setVehicles(parsed.vehicles.map((v: Vehicle, i: number) => {
-            const preset = uaeVehicles[i % uaeVehicles.length];
-            return {
-              ...v,
-              image: v.image || preset.image,
-              gallery: (v.gallery && v.gallery.length) ? v.gallery : preset.gallery,
-              specs: v.specs || preset.specs
-            };
-          }));
+        if (Array.isArray(parsed.vehicles)) {
+          // Strictly filter out any mock vehicles (v-uae-2..10)
+          const genuineVehicles = parsed.vehicles.filter((v: Vehicle) => v.id === 'v-dxb-01' || v.isLiveHardware);
+          if (genuineVehicles.length > 0) {
+            setVehicles(genuineVehicles);
+          }
         }
-        if (parsed.drivers) {
-          setDrivers(parsed.drivers.map((d: Driver, i: number) => {
-            const preset = UAE_DRIVERS[i % UAE_DRIVERS.length];
-            return {
-              ...d,
-              avatar: preset ? preset.avatar : d.avatar,
-              experience: d.experience || preset?.experience || '7 years',
-              bloodGroup: d.bloodGroup || preset?.bloodGroup || 'O+'
-            };
-          }));
+        if (Array.isArray(parsed.drivers) && parsed.drivers.length > 0) {
+          setDrivers(parsed.drivers);
         }
-        if (parsed.tasks) setTasks(parsed.tasks);
-        if (parsed.expenses) setExpenses(parsed.expenses);
-        if (parsed.alerts) setAlerts(parsed.alerts);
-        if (parsed.trips) setTrips(parsed.trips);
-        if (parsed.geofences) setGeofences(parsed.geofences);
-        if (parsed.commands) setCommands(parsed.commands);
-        if (parsed.integrations) setIntegrations(parsed.integrations);
+        if (Array.isArray(parsed.geofences)) setGeofences(parsed.geofences);
+        if (Array.isArray(parsed.commands)) setCommands(parsed.commands);
       }
     } catch (e) {
       console.warn('Could not read fleet state from localStorage', e);
@@ -326,15 +384,17 @@ export function FleetProvider({ children }: { children: ReactNode }) {
   const resetDemoData = () => {
     try {
       localStorage.removeItem(FLEET_STORAGE_KEY);
+      localStorage.removeItem('trackwe_demo_fleet_uae_state_v1');
+      localStorage.removeItem('trackwe_demo_fleet_uae_state');
     } catch (e) {
       console.warn('Could not clear fleet localStorage', e);
     }
-    setVehicles(generateInitialUaeVehicles());
-    setDrivers(generateInitialUaeDrivers());
-    setTasks(generateInitialUaeTasks());
-    setExpenses(generateInitialUaeExpenses());
-    setAlerts(generateInitialUaeAlerts());
-    setTrips(generateInitialUaeTrips());
+    setVehicles([GENUINE_LIVE_VEHICLE]);
+    setDrivers([GENUINE_DRIVER]);
+    setTasks([]);
+    setExpenses([]);
+    setAlerts([]);
+    setTrips([]);
     setGeofences(uaeGeofences);
     setCommands([]);
     setIntegrations(uaeIntegrations);

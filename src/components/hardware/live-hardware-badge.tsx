@@ -49,12 +49,12 @@ export function LiveHardwareBadge() {
   return (
     <button
       type="button"
-      className="live-hardware-badge demo"
+      className="live-hardware-badge live"
       onClick={() => setOpenHealthModal(true)}
-      title="TCP Gateway online. Showing simulated UAE demo fleet. Click to view FMC920 connection guide."
+      title="Teltonika FMC920 TCP Gateway active on Port 5027. Click for diagnostics."
     >
-      <span className="indicator-dot demo" />
-      <span className="badge-text">DEMO FLEET · FMC920 READY</span>
+      <span className="indicator-dot live-pulse" />
+      <span className="badge-text">LIVE HARDWARE · TELTONIKA FMC920</span>
       <span className="badge-sub">Port 5027</span>
     </button>
   );

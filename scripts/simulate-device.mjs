@@ -20,14 +20,14 @@ require.extensions[".ts"] = function (module, filename) {
 const { buildImeiHandshakeFrame, buildCodec8Packet, buildCodec8ExtendedPacket } = require("../src/server/protocol/teltonika-builder.ts");
 const { decodeTeltonikaAck } = require("../src/server/protocol/teltonika-ack.ts");
 
-const host = process.env.GPS_TCP_HOST || "127.0.0.1";
-const port = parseInt(process.env.GPS_TCP_PORT || "5027", 10);
-
 const args = process.argv.slice(2);
 function getArg(name, def) {
   const idx = args.indexOf(name);
   return idx !== -1 && args[idx + 1] ? args[idx + 1] : def;
 }
+
+const host = getArg("--host", process.env.GPS_TCP_HOST || "127.0.0.1");
+const port = parseInt(getArg("--port", process.env.GPS_TCP_PORT || "5027"), 10);
 
 const imei = getArg("--imei", "864275048912345");
 const packetsCount = parseInt(getArg("--count", "3"), 10);

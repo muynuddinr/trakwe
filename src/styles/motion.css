@@ -1,0 +1,139 @@
+/* Subtle motion shared by routes and reusable components. */
+:root {
+  --motion-fast: 160ms;
+  --motion-normal: 280ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes dialog-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@keyframes dialog-exit {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.98);
+  }
+}
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+.page-transition {
+  animation: page-enter var(--motion-normal) var(--motion-ease) both;
+}
+.login-form-wrap,
+.login-story-content {
+  animation: page-enter 400ms var(--motion-ease) both;
+}
+.kpi-grid > .kpi {
+  animation: page-enter 360ms var(--motion-ease) both;
+}
+.kpi-grid > .kpi:nth-child(2) {
+  animation-delay: 35ms;
+}
+.kpi-grid > .kpi:nth-child(3) {
+  animation-delay: 70ms;
+}
+.kpi-grid > .kpi:nth-child(4) {
+  animation-delay: 105ms;
+}
+.kpi-grid > .kpi:nth-child(5) {
+  animation-delay: 140ms;
+}
+.sidebar {
+  transition:
+    width var(--motion-normal) var(--motion-ease),
+    transform var(--motion-normal) var(--motion-ease);
+}
+.main {
+  transition: margin-left var(--motion-normal) var(--motion-ease);
+}
+.button,
+.nav-item,
+.vehicle-row,
+.task-card,
+.demo-accounts > button {
+  transition:
+    background-color var(--motion-fast),
+    border-color var(--motion-fast),
+    box-shadow var(--motion-fast),
+    transform var(--motion-fast) var(--motion-ease);
+}
+.button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.task-card:hover {
+  box-shadow: 0 5px 16px #0c2f4a0b;
+}
+.header-popover,
+.search-results,
+.vehicle-details {
+  animation: page-enter 200ms var(--motion-ease) both;
+}
+.toast {
+  animation: toast-enter 240ms var(--motion-ease) both;
+}
+.drawer-backdrop {
+  animation: fade-in 200ms ease both;
+}
+.modal-overlay[data-state="open"] {
+  animation: fade-in 200ms ease both;
+}
+.modal-overlay[data-state="closed"] {
+  animation: fade-out 160ms ease both;
+}
+.modal[data-state="open"] {
+  animation: dialog-enter 260ms var(--motion-ease) both;
+}
+.modal[data-state="closed"] {
+  animation: dialog-exit 160ms ease both;
+}
+.bar-track i {
+  transition: width 400ms var(--motion-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

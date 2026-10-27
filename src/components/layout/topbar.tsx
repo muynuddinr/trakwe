@@ -1,224 +1,197 @@
-'use client';
-
-import React, { useState } from 'react';
-import { useAuth } from '@/context/auth-context';
-import { useFleet } from '@/context/fleet-context';
-import { useTheme } from '@/context/theme-context';
-import { NavItemKey } from '@/data/mock-credentials';
-import { NotificationPopover } from './notification-popover';
-import { UserPopover } from './user-popover';
-import { LiveHardwareBadge } from '@/components/hardware/live-hardware-badge';
+"use client";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { Badge } from "@/components/table";
 import {
-  Menu,
-  Search,
+  ArrowRight,
   Bell,
   ChevronDown,
-  Truck,
   ListTodo,
-  Sun,
-  Moon
-} from 'lucide-react';
+  LogOut,
+  Menu,
+  Search,
+  Settings,
+  Truck,
+} from "lucide-react";
 
-interface TopbarProps {
-  title: string;
-  onNavigate: (page: NavItemKey) => void;
-  onToggleMobile: () => void;
-  onSelectVehicle: (id: string) => void;
-}
+import { nav } from "@/config/navigation";
 
-export function Topbar({
-  title,
-  onNavigate,
-  onToggleMobile,
-  onSelectVehicle
-}: TopbarProps) {
-  const { user, role } = useAuth();
-  const { alerts, vehicles, tasks } = useFleet();
-  const { theme, toggleTheme } = useTheme();
-
-  const [globalSearch, setGlobalSearch] = useState('');
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
-
-  const unreadAlerts = alerts.filter((a) => a.status === 'Unacknowledged').length;
-
-  const filteredVehicles = globalSearch.trim()
-    ? vehicles.filter((v) =>
-        `${v.registration} ${v.name} ${v.driver} ${v.emirate}`
-          .toLowerCase()
-          .includes(globalSearch.toLowerCase())
-      ).slice(0, 4)
-    : [];
-
-  const filteredTasks = globalSearch.trim()
-    ? tasks.filter((t) =>
-        `${t.title} ${t.vehicle} ${t.employee}`
-          .toLowerCase()
-          .includes(globalSearch.toLowerCase())
-      ).slice(0, 3)
-    : [];
-
+import { useWorkspace } from "@/providers/workspace-provider";
+export function Topbar() {
+  const {
+    account,
+    onLogout,
+    mobile,
+    setMobile,
+    setSelectedId,
+    global,
+    setGlobal,
+    notifications,
+    setNotifications,
+    profile,
+    setProfile,
+    setModal,
+    vehicles,
+    records,
+    access,
+    employee,
+    activeAlerts,
+    title,
+    go,
+  } = useWorkspace();
   return (
     <header className="topbar">
-      {/* Left: Mobile Toggle & Breadcrumbs */}
       <div className="breadcrumb">
         <button
-          type="button"
           className="icon-button mobile-menu"
-          onClick={onToggleMobile}
-          aria-label="Toggle navigation menu"
+          onClick={() => setMobile(!mobile)}
+          aria-label="Open menu"
         >
           <Menu size={20} />
         </button>
-        <span>Trackwe UAE</span>
+        <span>Workspace</span>
         <span>/</span>
         <b>{title}</b>
       </div>
-
-      {/* Right: Search, Theme Toggle, Notifications, Profile */}
       <div className="topbar-right">
-        {/* Global Search */}
         <div className="global-search">
           <Search size={15} />
           <input
-            placeholder="Search fleet, tasks, UAE plates…"
-            value={globalSearch}
-            onChange={(e) => setGlobalSearch(e.target.value)}
-            aria-label="Global fleet search"
+            placeholder="Search fleet…"
+            value={global}
+            onChange={(e) => setGlobal(e.target.value)}
+            aria-label="Global search"
           />
-          {globalSearch.trim() && (
+          {global && (
             <div className="search-results">
-              <div style={{ padding: '6px 8px 4px', fontSize: 9, color: '#8898aa', fontWeight: 700 }}>
-                MATCHING VEHICLES
-              </div>
-              {filteredVehicles.map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => {
-                    onSelectVehicle(v.id);
-                    onNavigate('vehicle-detail');
-                    setGlobalSearch('');
-                  }}
-                >
-                  <Truck size={15} />
-                  <span>
-                    {v.registration}
-                    <small>{v.name} · {v.emirate}</small>
-                  </span>
-                </button>
-              ))}
-
-              {filteredTasks.length > 0 && (
-                <>
-                  <div style={{ padding: '8px 8px 4px', fontSize: 9, color: '#8898aa', fontWeight: 700 }}>
-                    MATCHING TASKS
-                  </div>
-                  {filteredTasks.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => {
-                        onNavigate('tasks');
-                        setGlobalSearch('');
-                      }}
-                    >
-                      <ListTodo size={15} />
-                      <span>
-                        {t.title}
-                        <small>{t.vehicle} · {t.status}</small>
-                      </span>
-                    </button>
-                  ))}
-                </>
-              )}
-
-              {!filteredVehicles.length && !filteredTasks.length && (
-                <div style={{ padding: 12, fontSize: 11, color: '#8898aa', textAlign: 'center' }}>
-                  No fleet records found
-                </div>
-              )}
+              {vehicles
+                .filter((v) =>
+                  `${v.registration} ${v.name} ${v.driver}`
+                    .toLowerCase()
+                    .includes(global.toLowerCase()),
+                )
+                .slice(0, 5)
+                .map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => {
+                      setSelectedId(v.id);
+                      go(employee ? "vehicles" : "tracking");
+                    }}
+                  >
+                    <Truck size={16} />
+                    <span>
+                      {v.registration}
+                      <small>{v.name}</small>
+                    </span>
+                  </button>
+                ))}
+              {records.tasks
+                .filter((t) =>
+                  String(t.title).toLowerCase().includes(global.toLowerCase()),
+                )
+                .slice(0, 3)
+                .map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => {
+                      go("tasks");
+                      setModal({ module: "tasks", row: t });
+                    }}
+                  >
+                    <ListTodo size={16} />
+                    {t.title}
+                  </button>
+                ))}
+              {nav
+                .filter((n) => access(n[0]))
+                .filter((n) =>
+                  n[1].toLowerCase().includes(global.toLowerCase()),
+                )
+                .slice(0, 3)
+                .map((n) => (
+                  <button key={n[0]} onClick={() => go(n[0])}>
+                    {n[1]}
+                    <ArrowRight size={14} />
+                  </button>
+                ))}
             </div>
           )}
         </div>
-
-        {/* Teltonika FMC920 Hardware Status Badge */}
-        <LiveHardwareBadge />
-
-        {/* Theme Mode Toggle (Light / Dark) */}
-        <button
-          type="button"
-          className="icon-button theme-toggle-btn"
-          onClick={toggleTheme}
-          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-          aria-label="Toggle theme"
-        >
-          {theme === 'dark' ? (
-            <Sun size={18} style={{ color: '#f59e0b' }} />
-          ) : (
-            <Moon size={18} style={{ color: '#64748b' }} />
-          )}
-        </button>
-
+        <ThemeToggle />
         <span className="top-divider" />
-
-        {/* Notifications Bell */}
         <button
-          type="button"
           className="icon-button notification-button"
-          aria-label={`Notifications (${unreadAlerts} unread)`}
+          aria-label="Notifications"
           onClick={() => {
-            setShowNotifications(!showNotifications);
-            setShowProfile(false);
+            setNotifications(!notifications);
+            setProfile(false);
           }}
         >
           <Bell size={19} />
-          {unreadAlerts > 0 && <i />}
+          {activeAlerts > 0 && <i />}
         </button>
-
-        {/* User Profile */}
         <button
-          type="button"
           className="profile-button"
           onClick={() => {
-            setShowProfile(!showProfile);
-            setShowNotifications(false);
+            setProfile(!profile);
+            setNotifications(false);
           }}
-          aria-label="User account menu"
         >
-          {user?.avatarUrl ? (
-            <img
-              src={user.avatarUrl}
-              alt={user.name}
-              className="topbar-avatar-img"
-              style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '2px solid #c6ab6d', flexShrink: 0, display: 'block' }}
-            />
-          ) : (
-            <span className="avatar">
-              {user?.avatar || user?.name?.slice(0, 2).toUpperCase() || 'TW'}
-            </span>
-          )}
-          <span style={{ minWidth: 0, overflow: 'hidden' }}>
-            <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.name}</b>
-            <small>{role}</small>
+          <PersonAvatar name={account.name} />
+          <span>
+            <b>{account.name}</b>
+            <small>{account.role}</small>
           </span>
           <ChevronDown size={13} />
         </button>
       </div>
-
-      {/* Popovers */}
-      {showNotifications && (
-        <NotificationPopover
-          onClose={() => setShowNotifications(false)}
-          onNavigate={onNavigate}
-        />
+      {notifications && (
+        <div className="header-popover">
+          <h3>
+            Notifications <Badge>Demo</Badge>
+          </h3>
+          {records.alerts
+            .filter((a) => a.status === "Unacknowledged")
+            .slice(0, 4)
+            .map((a) => (
+              <button
+                key={a.id}
+                onClick={() => {
+                  go("alerts");
+                  setNotifications(false);
+                }}
+              >
+                <Bell size={15} />
+                <span>
+                  {a.type}
+                  <small>{a.vehicle}</small>
+                </span>
+              </button>
+            ))}
+          {!activeAlerts && <p>All caught up.</p>}
+        </div>
       )}
-
-      {showProfile && (
-        <UserPopover
-          onClose={() => setShowProfile(false)}
-          onNavigate={onNavigate}
-        />
+      {profile && (
+        <div className="header-popover profile-popover">
+          <b>
+            {account.name} · {account.role}
+          </b>
+          <p>Frontend preview account</p>
+          <button
+            onClick={() => {
+              go("profile");
+              setProfile(false);
+            }}
+          >
+            <Settings size={15} />
+            My profile
+          </button>
+          <button onClick={onLogout}>
+            <LogOut size={15} />
+            Log out / switch account
+          </button>
+        </div>
       )}
     </header>
   );

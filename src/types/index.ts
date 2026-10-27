@@ -1,41 +1,21 @@
-export type UserRole = 'Super Admin' | 'Admin' | 'Manager' | 'Employee';
-
-export interface AuthUser {
+export type Status = "Moving" | "Idle" | "Offline";
+export type Role = "Super Admin" | "Admin" | "Manager" | "Employee";
+export interface DemoAccount {
   id: string;
   name: string;
   email: string;
-  role: UserRole;
-  team: string;
-  avatar?: string;
-  avatarUrl?: string;
-  assignedVehicleId?: string;
+  role: Role;
+  orgId: string;
+  vehicleIds: string[];
 }
-
-export type VehicleStatus = 'Moving' | 'Idle' | 'Offline';
-
-export interface VehicleSpecs {
-  engine: string;
-  transmission: string;
-  payload: string;
-  tankCapacity: string;
-  dimensions: string;
-  vin: string;
-  year: number;
-  odometer: number;
-  oilLife: number; // percentage
-  brakeLife: number; // percentage
-  tireHealth: string;
-  nextService: string;
-}
-
 export interface Vehicle {
   id: string;
+  orgId: string;
   registration: string;
   name: string;
   type: string;
   driver: string;
-  driverId?: string;
-  status: VehicleStatus;
+  status: Status;
   speed: number;
   lat: number;
   lng: number;
@@ -48,172 +28,27 @@ export interface Vehicle {
   can: boolean;
   immobilizer: boolean;
   camera: boolean;
-  emirate: string;
-  locationName: string;
-  image?: string;
-  gallery?: string[];
-  specs?: VehicleSpecs;
-  // Teltonika FMC920 Hardware Integration Fields
-  isLiveHardware?: boolean;
-  liveImei?: string;
-  ignitionState?: boolean;
-  movementState?: boolean;
-  externalVoltage?: number;
-  internalBattery?: number;
-  gsmSignal?: number;
-  isOutOfCorridor?: boolean;
-  lastDeviceTimestamp?: string;
-  lastServerTimestamp?: string;
-  heading?: number;
-  altitude?: number;
-  satellites?: number;
-  hasGpsFix?: boolean;
-  rawIo?: Record<number, number | string>;
-  connectionStatus?: DeviceConnectionStatus;
+  region: string;
 }
-
-export type TcpConnectionState = 'Disconnected' | 'Connecting' | 'Connected' | 'Authenticated' | 'Rejected';
-
-export type DeviceConnectionStatus =
-  | 'Registered'
-  | 'Connected'
-  | 'Reporting'
-  | 'Stale'
-  | 'Offline'
-  | 'No GPS fix';
-
-export interface DeviceConnectionHealth {
-  imei: string;
-  vehicleId: string;
-  vehicleName: string;
-  registration?: string;
-  tcpState: TcpConnectionState;
-  connectionStatus: DeviceConnectionStatus;
-  remoteAddress: string | null;
-  remotePort: number | null;
-  connectedAt: string | null;
-  lastPacketReceived: string | null;
-  lastValidGps: string | null;
-  lastAckSent: string | null;
-  lastAckHex: string | null;
-  totalRecordsProcessed: number;
-  totalPacketsReceived: number;
-  parserErrorCount: number;
-  lastError: string | null;
-  isStale: boolean;
-  hasGpsFix: boolean;
-}
-
-export interface TrackerRegistryEntry {
-  imei: string;
-  vehicleId: string;
-  vehicleName: string;
-  registration?: string;
-  deviceModel: string;
-  enabled: boolean;
-  notes?: string;
-}
-
-export type RecordItem = {
-  id: string;
-  [key: string]: any;
-};
-
-export interface Driver {
-  id: string;
-  name: string;
-  contact: string;
-  vehicle: string;
-  score: number;
-  status: 'On duty' | 'Off duty';
-  events: number;
-  licenseNo: string;
-  emirate: string;
-  avatar?: string;
-  experience?: string;
-  bloodGroup?: string;
-}
-
-export interface Task {
-  id: string;
-  title: string;
-  description: string;
-  employee: string;
-  vehicle: string;
-  priority: 'High' | 'Medium' | 'Low';
-  due: string;
-  status: 'To do' | 'In progress' | 'Completed';
-  createdBy?: string;
-}
-
-export interface Expense {
-  id: string;
-  title: string;
-  category: 'Fuel' | 'Maintenance' | 'Tolls' | 'Insurance' | 'Other';
-  vehicle: string;
-  amount: number; // in AED
-  date: string;
-  submitted: string;
-  receipt: string;
-  status: 'Pending' | 'Approved' | 'Rejected';
-  reviewedBy?: string;
-}
-
-export interface Alert {
-  id: string;
-  type: 'Overspeed' | 'Fuel drop' | 'Temperature' | 'Device offline' | 'Harsh braking' | 'Geofence breach';
-  severity: 'Critical' | 'Warning' | 'Info';
-  vehicle: string;
-  time: string;
-  location: string;
-  status: 'Unacknowledged' | 'Acknowledged';
-}
-
-export interface Trip {
-  id: string;
-  vehicle: string;
-  driver: string;
-  route: string;
-  date: string;
-  distance: number; // in km
-  duration: string;
-  average: number; // km/h
-  max: number; // km/h
-  stop: number; // min
-  status: 'In progress' | 'Completed';
-}
-
+export type RecordItem = { id: string; [key: string]: string | number };
 export interface Geofence {
   id: string;
+  orgId: string;
   name: string;
-  type: 'circle' | 'polygon';
+  type: "circle" | "polygon";
   center: [number, number];
   points: [number, number][];
   radius: number;
   enabled: boolean;
   vehicles: string[];
 }
-
-export interface CommandLog {
-  id: string;
-  vehicle: string;
-  action: string;
-  reason: string;
-  time: string;
-  status: string;
-  initiatedBy: string;
+export interface DemoStore {
+  version: 2;
+  vehicles: Vehicle[];
+  records: Record<string, RecordItem[]>;
+  geofences: Geofence[];
+  preferences: Record<string, { name: string; emailAlerts: boolean }>;
 }
-
-export interface DeviceIntegration {
-  id: string;
-  manufacturer: string;
-  model: string;
-  protocol: string;
-  capabilities: string;
-  connection: string;
-  status: string;
-}
-
 export interface FleetService {
   listVehicles(): Promise<Vehicle[]>;
   saveVehicle(vehicle: Vehicle): Promise<Vehicle>;

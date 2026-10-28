@@ -47,6 +47,8 @@ export interface DeviceConnection {
   speed: number;
   voltageExt: number;
   voltageInt: number;
+  lat?: number;
+  lng?: number;
   fuel: number;
   temperature: number | null;
   rawPayloadHex: string;

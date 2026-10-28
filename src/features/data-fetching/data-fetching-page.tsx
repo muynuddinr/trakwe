@@ -217,6 +217,8 @@ export function DataFetchingPage() {
         speed: d.latestTelemetry?.speed ?? 0,
         voltageExt: d.latestTelemetry?.external_voltage ?? 0,
         voltageInt: d.latestTelemetry?.internal_battery_voltage ?? 0,
+        lat: d.latestTelemetry?.lat,
+        lng: d.latestTelemetry?.lng,
         fuel: 0,
         temperature: null,
         rawPayloadHex: d.latestTelemetry?.raw_payload_hex || "",
@@ -757,6 +759,7 @@ export function DataFetchingPage() {
                     <th>Hardware Model</th>
                     <th>Protocol</th>
                     <th>Assigned Vehicle</th>
+                    <th>Live GPS / Fix Status</th>
                     <th>Status</th>
                     <th>Last Communication</th>
                     <th>GSM Signal</th>
@@ -794,6 +797,23 @@ export function DataFetchingPage() {
                           <Truck size={14} style={{ color: "var(--gold)" }} />
                           <b>{dev.vehicleReg}</b>
                         </div>
+                      </td>
+                      <td>
+                        {dev.lat && dev.lng && (Math.abs(dev.lat) > 0.0001 || Math.abs(dev.lng) > 0.0001) ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span className="badge moving" style={{ fontFamily: "monospace", fontSize: 11 }}>
+                              {dev.lat.toFixed(5)}, {dev.lng.toFixed(5)}
+                            </span>
+                            <small style={{ color: "var(--green)", fontWeight: 600 }}>({dev.satellites} Sats)</small>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span className="badge idle" style={{ fontSize: 11 }}>
+                              <Radio size={11} className="pulse-anim" /> Acquiring GNSS Fix
+                            </span>
+                            <small style={{ color: "var(--muted)" }}>0 Sats (Indoor)</small>
+                          </div>
+                        )}
                       </td>
                       <td>
                         <span className={`badge ${dev.connectionStatus.toLowerCase()}`}>
@@ -1479,6 +1499,22 @@ export function DataFetchingPage() {
               <div>
                 <span>Last Communication</span>
                 <strong>{selectedDevice.lastCommunication}</strong>
+              </div>
+              <div>
+                <span>Latitude & Longitude</span>
+                <strong>
+                  {selectedDevice.lat && selectedDevice.lng && (Math.abs(selectedDevice.lat) > 0.0001 || Math.abs(selectedDevice.lng) > 0.0001) ? (
+                    <span style={{ color: "var(--green)", fontFamily: "monospace" }}>
+                      {selectedDevice.lat.toFixed(5)}, {selectedDevice.lng.toFixed(5)}
+                    </span>
+                  ) : (
+                    <span style={{ color: "var(--gold)" }}>Acquiring GNSS Satellite Fix</span>
+                  )}
+                </strong>
+              </div>
+              <div>
+                <span>GNSS Satellites</span>
+                <strong>{selectedDevice.satellites > 0 ? `${selectedDevice.satellites} Locked` : "0 Locked (Needs Outdoor / Window)"}</strong>
               </div>
             </div>
 

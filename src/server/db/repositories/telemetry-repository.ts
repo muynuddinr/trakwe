@@ -1,4 +1,4 @@
-import { AvlRecord } from "../../protocol/teltonika-types";
+import { AvlRecord, TelemetryProperties } from "../../protocol/teltonika-types";
 import { getDatabase, IDatabaseClient } from "../db";
 
 export interface LatestTelemetrySnapshot {
@@ -18,6 +18,17 @@ export interface LatestTelemetrySnapshot {
   external_voltage: number | null;
   internal_battery_voltage: number | null;
   gsm_signal: number | null;
+  odometer_km?: number | null;
+  fuel_level?: number | null;
+  fuel_used_liters?: number | null;
+  engine_rpm?: number | null;
+  engine_temp?: number | null;
+  din1?: number | null;
+  din2?: number | null;
+  din3?: number | null;
+  ain1_mv?: number | null;
+  ain2_mv?: number | null;
+  io_elements?: any;
   raw_payload_hex: string | null;
   updated_at: string;
   // Joined fields
@@ -44,6 +55,16 @@ export interface HistoricalTelemetryRecord {
   external_voltage: number | null;
   internal_battery_voltage: number | null;
   gsm_signal: number | null;
+  odometer_km?: number | null;
+  fuel_level?: number | null;
+  fuel_used_liters?: number | null;
+  engine_rpm?: number | null;
+  engine_temp?: number | null;
+  din1?: number | null;
+  din2?: number | null;
+  din3?: number | null;
+  ain1_mv?: number | null;
+  ain2_mv?: number | null;
   io_elements: string | null;
   codec_id: string;
   raw_payload_hex: string | null;
@@ -125,14 +146,20 @@ export class TelemetryRepository {
         const serverTimeIso = new Date().toISOString();
         const recordId = `rec-${deviceId}-${rec.timestampMs}`;
 
+        const props = rec.properties as TelemetryProperties;
+        const ioElementsJson = JSON.stringify(rec.ioElements, (_, v) =>
+          typeof v === "bigint" ? v.toString() : v
+        );
+
         // Attempt idempotent insert into historical_telemetry
         try {
           const insertResult = await tx.execute(
             `INSERT INTO historical_telemetry
              (id, device_id, vehicle_id, org_id, device_timestamp, server_timestamp, priority,
               lat, lng, altitude, angle, speed, satellites, ignition, movement,
-              external_voltage, internal_battery_voltage, gsm_signal, io_elements, codec_id, raw_payload_hex)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+              external_voltage, internal_battery_voltage, gsm_signal, io_elements, codec_id, raw_payload_hex,
+              odometer_km, fuel_level, fuel_used_liters, engine_rpm, engine_temp, din1, din2, din3, ain1_mv, ain2_mv)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)`,
             [
               recordId,
               deviceId,
@@ -147,14 +174,24 @@ export class TelemetryRepository {
               rec.gps.angle,
               rec.gps.speed,
               rec.gps.satellites,
-              rec.properties.ignition,
-              rec.properties.movement,
-              rec.properties.externalVoltage,
-              rec.properties.internalBatteryVoltage,
-              rec.properties.gsmSignal,
-              JSON.stringify(rec.ioElements, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
+              props.ignition,
+              props.movement,
+              props.externalVoltage,
+              props.internalBatteryVoltage,
+              props.gsmSignal,
+              ioElementsJson,
               `0x${codecId.toString(16).padStart(2, "0")}`,
               rawHex,
+              props.odometerKm ?? null,
+              props.fuelLevel ?? null,
+              props.fuelUsedLiters ?? null,
+              props.engineRpm ?? null,
+              props.engineTemp ?? null,
+              props.din1 ?? null,
+              props.din2 ?? null,
+              props.din3 ?? null,
+              props.ain1Mv ?? null,
+              props.ain2Mv ?? null,
             ]
           );
 
@@ -163,10 +200,10 @@ export class TelemetryRepository {
 
             // Detect Ignition Transition
             if (
-              rec.properties.ignition !== "Unknown" &&
-              (!lastSnapshot || lastSnapshot.ignition !== rec.properties.ignition)
+              props.ignition !== "Unknown" &&
+              (!lastSnapshot || lastSnapshot.ignition !== props.ignition)
             ) {
-              const eventType = rec.properties.ignition === "ON" ? "IGNITION_ON" : "IGNITION_OFF";
+              const eventType = props.ignition === "ON" ? "IGNITION_ON" : "IGNITION_OFF";
               const ignEventId = `ign-${deviceId}-${rec.timestampMs}`;
               await tx.execute(
                 `INSERT INTO ignition_events
@@ -182,7 +219,7 @@ export class TelemetryRepository {
                   serverTimeIso,
                   rec.gps.latitude,
                   rec.gps.longitude,
-                  rec.properties.externalVoltage,
+                  props.externalVoltage,
                 ]
               );
             }
@@ -192,8 +229,9 @@ export class TelemetryRepository {
               await tx.execute(
                 `INSERT INTO device_latest_telemetry
                  (device_id, vehicle_id, imei, device_timestamp, server_timestamp, lat, lng, altitude, angle, speed, satellites,
-                  ignition, movement, external_voltage, internal_battery_voltage, gsm_signal, raw_payload_hex, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                  ignition, movement, external_voltage, internal_battery_voltage, gsm_signal, raw_payload_hex, updated_at,
+                  odometer_km, fuel_level, fuel_used_liters, engine_rpm, engine_temp, din1, din2, din3, ain1_mv, ain2_mv, io_elements)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
                  ON CONFLICT(device_id) DO UPDATE SET
                    vehicle_id = excluded.vehicle_id,
                    imei = excluded.imei,
@@ -211,7 +249,18 @@ export class TelemetryRepository {
                    internal_battery_voltage = excluded.internal_battery_voltage,
                    gsm_signal = excluded.gsm_signal,
                    raw_payload_hex = excluded.raw_payload_hex,
-                   updated_at = excluded.updated_at`,
+                   updated_at = excluded.updated_at,
+                   odometer_km = excluded.odometer_km,
+                   fuel_level = excluded.fuel_level,
+                   fuel_used_liters = excluded.fuel_used_liters,
+                   engine_rpm = excluded.engine_rpm,
+                   engine_temp = excluded.engine_temp,
+                   din1 = excluded.din1,
+                   din2 = excluded.din2,
+                   din3 = excluded.din3,
+                   ain1_mv = excluded.ain1_mv,
+                   ain2_mv = excluded.ain2_mv,
+                   io_elements = excluded.io_elements`,
                 [
                   deviceId,
                   vehicleId,
@@ -224,13 +273,24 @@ export class TelemetryRepository {
                   rec.gps.angle,
                   rec.gps.speed,
                   rec.gps.satellites,
-                  rec.properties.ignition,
-                  rec.properties.movement,
-                  rec.properties.externalVoltage,
-                  rec.properties.internalBatteryVoltage,
-                  rec.properties.gsmSignal,
+                  props.ignition,
+                  props.movement,
+                  props.externalVoltage,
+                  props.internalBatteryVoltage,
+                  props.gsmSignal,
                   rawHex,
                   serverTimeIso,
+                  props.odometerKm ?? null,
+                  props.fuelLevel ?? null,
+                  props.fuelUsedLiters ?? null,
+                  props.engineRpm ?? null,
+                  props.engineTemp ?? null,
+                  props.din1 ?? null,
+                  props.din2 ?? null,
+                  props.din3 ?? null,
+                  props.ain1Mv ?? null,
+                  props.ain2Mv ?? null,
+                  ioElementsJson,
                 ]
               );
 
@@ -246,11 +306,22 @@ export class TelemetryRepository {
                 angle: rec.gps.angle,
                 speed: rec.gps.speed,
                 satellites: rec.gps.satellites,
-                ignition: rec.properties.ignition,
-                movement: rec.properties.movement,
-                external_voltage: rec.properties.externalVoltage,
-                internal_battery_voltage: rec.properties.internalBatteryVoltage,
-                gsm_signal: rec.properties.gsmSignal,
+                ignition: props.ignition,
+                movement: props.movement,
+                external_voltage: props.externalVoltage,
+                internal_battery_voltage: props.internalBatteryVoltage,
+                gsm_signal: props.gsmSignal,
+                odometer_km: props.odometerKm ?? null,
+                fuel_level: props.fuelLevel ?? null,
+                fuel_used_liters: props.fuelUsedLiters ?? null,
+                engine_rpm: props.engineRpm ?? null,
+                engine_temp: props.engineTemp ?? null,
+                din1: props.din1 ?? null,
+                din2: props.din2 ?? null,
+                din3: props.din3 ?? null,
+                ain1_mv: props.ain1Mv ?? null,
+                ain2_mv: props.ain2Mv ?? null,
+                io_elements: ioElementsJson,
                 raw_payload_hex: rawHex,
                 updated_at: serverTimeIso,
               };
@@ -352,7 +423,7 @@ export class TelemetryRepository {
       ${whereClause}
     `;
 
-    const rows = await this.db.query<{ count: number | string }>(sql, params);
+    const rows = await this.db.query<{ count: number | string }>(queryClean(sql), params);
     return Number(rows[0]?.count ?? 0);
   }
 
@@ -473,4 +544,8 @@ export class TelemetryRepository {
 
     return this.db.query<IgnitionEventRecord>(query, params);
   }
+}
+
+function queryClean(sql: string): string {
+  return sql.trim();
 }

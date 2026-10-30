@@ -5,6 +5,7 @@ import { SessionRepository } from "../db/repositories/session-repository";
 import { TelemetryRepository } from "../db/repositories/telemetry-repository";
 import { encodeTeltonikaAck } from "../protocol/teltonika-ack";
 import { extractPacketsFromStream } from "../protocol/teltonika-parser";
+import { DeviceIgnitionConfig } from "../protocol/teltonika-types";
 import { ingestionMetrics } from "./metrics";
 
 export interface Fmc920TcpServiceOptions {
@@ -20,12 +21,15 @@ interface SocketContext {
   state: "WAITING_HANDSHAKE" | "AUTHENTICATED" | "CLOSED";
   deviceId: string | null;
   imei: string | null;
+  model: string | null;
+  ignitionConfig: DeviceIgnitionConfig | null;
   vehicleId: string | null;
   orgId: string | null;
   remoteIp: string;
   remotePort: number;
   buffer: Buffer;
   connectedAt: Date;
+  lastKnownIgnition?: "ON" | "OFF" | "Unknown";
 }
 
 export class Fmc920TcpService {
@@ -109,6 +113,8 @@ export class Fmc920TcpService {
       state: "WAITING_HANDSHAKE",
       deviceId: null,
       imei: null,
+      model: null,
+      ignitionConfig: null,
       vehicleId: null,
       orgId: null,
       remoteIp,
@@ -245,8 +251,17 @@ export class Fmc920TcpService {
     ctx.state = "AUTHENTICATED";
     ctx.deviceId = device.id;
     ctx.imei = device.imei;
+    ctx.model = device.model || "Teltonika FMC920";
     ctx.vehicleId = device.vehicle_id;
     ctx.orgId = device.org_id;
+
+    // Model-aware ignition configuration
+    ctx.ignitionConfig = {
+      source: (device.ignition_source as any) || "DIN1",
+      highVoltageThreshold: device.ignition_high_threshold ?? 13.2,
+      lowVoltageThreshold: device.ignition_low_threshold ?? 12.8,
+      rpmThreshold: device.ignition_rpm_threshold ?? 400,
+    };
 
     ingestionMetrics.recordConnection(true);
 
@@ -266,7 +281,7 @@ export class Fmc920TcpService {
       orgId: device.org_id,
       eventType: "Device connected",
       severity: "INFO",
-      message: `Teltonika FMC920 authenticated: IMEI ${device.imei} (${ctx.remoteIp}:${ctx.remotePort})`,
+      message: `${device.model || "Teltonika GPS"} authenticated: IMEI ${device.imei} (${ctx.remoteIp}:${ctx.remotePort}) [Ignition: ${ctx.ignitionConfig.source}]`,
     });
 
     // Send single byte 0x01 (Connection accepted)
@@ -281,7 +296,11 @@ export class Fmc920TcpService {
   private async handleTelemetryData(socket: net.Socket, ctx: SocketContext) {
     if (!ctx.deviceId || !ctx.imei || !ctx.orgId) return;
 
-    const streamResult = extractPacketsFromStream(ctx.buffer);
+    const streamResult = extractPacketsFromStream(ctx.buffer, {
+      model: ctx.model || undefined,
+      ignitionConfig: ctx.ignitionConfig || undefined,
+      previousIgnitionState: ctx.lastKnownIgnition,
+    });
     ctx.buffer = streamResult.remainingBuffer;
 
     // Log any stream parsing errors
@@ -324,6 +343,13 @@ export class Fmc920TcpService {
         const latency = Date.now() - startMs;
         ingestionMetrics.recordPacket(true, persistResult.accepted, latency);
 
+        if (packet.records.length > 0) {
+          const lastRecord = packet.records[packet.records.length - 1];
+          if (lastRecord.properties.ignition !== "Unknown") {
+            ctx.lastKnownIgnition = lastRecord.properties.ignition;
+          }
+        }
+
         await this.deviceRepo.updateLastCommunication(ctx.deviceId, new Date());
         await this.sessionRepo.recordPacket(ctx.id, persistResult.accepted, packet.rawPayloadLength);
 
@@ -334,7 +360,7 @@ export class Fmc920TcpService {
           orgId: ctx.orgId,
           eventType: "GPS packet received",
           severity: "INFO",
-          message: `Processed ${packet.recordCount} AVL records (${persistResult.accepted} new, ${persistResult.duplicates} duplicates) via ${packet.codecName}`,
+          message: `Processed ${packet.recordCount} AVL records (${persistResult.accepted} new, ${persistResult.duplicates} duplicates) via ${packet.codecName} for ${ctx.model || "device"}`,
           packetRef: packet.rawHex.slice(0, 32),
         });
 
@@ -372,3 +398,7 @@ export function getFmc920TcpService(): Fmc920TcpService {
   }
   return tcpServiceInstance;
 }
+
+// Unified Teltonika TCP Service aliases for shared ingestion architecture
+export const TeltonikaTcpService = Fmc920TcpService;
+export const getTeltonikaTcpService = getFmc920TcpService;

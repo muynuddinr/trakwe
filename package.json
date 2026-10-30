@@ -7,11 +7,14 @@
     "build": "next build",
     "start": "node scripts/start-production.mjs",
     "seed": "node scripts/seed-fmc920.mjs",
+    "seed:fmc130": "node scripts/seed-fmc130.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/run-all-tests.mjs",
     "test:demo": "node scripts/test-demo.cjs",
     "test:protocol": "node tests/fmc920-backend.test.cjs",
+    "test:fmc130": "node tests/fmc130-backend.test.cjs",
     "service:fmc920": "node scripts/fmc920-service.mjs",
+    "service:teltonika": "node scripts/fmc920-service.mjs",
     "simulate:device": "node scripts/simulate-device.mjs"
   },
   "dependencies": {

@@ -1,52 +1,61 @@
 import { calculateTeltonikaCrc16, verifyTeltonikaCrc } from "./crc16";
 import {
   AvlRecord,
+  DeviceIgnitionConfig,
+  Fmc130TelemetryProperties,
   Fmc920TelemetryProperties,
   GpsData,
   IOElement,
   ParsedAvlPacket,
   ParsePacketResult,
+  TELTONIKA_AVL_IDS,
   TELTONIKA_CODECS,
+  TelemetryProperties,
 } from "./teltonika-types";
+
+export interface ParsePacketOptions {
+  model?: string;
+  ignitionConfig?: DeviceIgnitionConfig;
+  previousIgnitionState?: "ON" | "OFF" | "Unknown";
+}
 
 /**
  * Extracts FMC920 essential I/O properties from parsed I/O map.
- * Missing properties are left undefined/null, not assumed as 0.
+ * Preserves strict backward compatibility with existing FMC920 tests and integrations.
  */
 export function extractFmc920Properties(ioElements: Record<number, IOElement>): Fmc920TelemetryProperties {
   // AVL ID 239: Ignition (1 byte, 0 = OFF, 1 = ON)
   let ignition: "ON" | "OFF" | "Unknown" = "Unknown";
-  if (ioElements[239] !== undefined) {
-    const raw = Number(ioElements[239].value);
+  if (ioElements[TELTONIKA_AVL_IDS.IGNITION] !== undefined) {
+    const raw = Number(ioElements[TELTONIKA_AVL_IDS.IGNITION].value);
     ignition = raw === 1 ? "ON" : "OFF";
   }
 
   // AVL ID 240: Movement (1 byte, 0 = Stationary, 1 = Moving)
   let movement: "Moving" | "Stationary" | "Unknown" = "Unknown";
-  if (ioElements[240] !== undefined) {
-    const raw = Number(ioElements[240].value);
+  if (ioElements[TELTONIKA_AVL_IDS.MOVEMENT] !== undefined) {
+    const raw = Number(ioElements[TELTONIKA_AVL_IDS.MOVEMENT].value);
     movement = raw === 1 ? "Moving" : "Stationary";
   }
 
   // AVL ID 66: External Voltage in mV (2 bytes) -> Volts
   let externalVoltage: number | null = null;
-  if (ioElements[66] !== undefined) {
-    const mv = Number(ioElements[66].value);
-    // Convert mV to Volts with 2 decimal precision
+  if (ioElements[TELTONIKA_AVL_IDS.EXTERNAL_VOLTAGE_MV] !== undefined) {
+    const mv = Number(ioElements[TELTONIKA_AVL_IDS.EXTERNAL_VOLTAGE_MV].value);
     externalVoltage = Math.round((mv / 1000) * 100) / 100;
   }
 
   // AVL ID 67: Internal Battery Voltage in mV (2 bytes) -> Volts
   let internalBatteryVoltage: number | null = null;
-  if (ioElements[67] !== undefined) {
-    const mv = Number(ioElements[67].value);
+  if (ioElements[TELTONIKA_AVL_IDS.BATTERY_VOLTAGE_MV] !== undefined) {
+    const mv = Number(ioElements[TELTONIKA_AVL_IDS.BATTERY_VOLTAGE_MV].value);
     internalBatteryVoltage = Math.round((mv / 1000) * 100) / 100;
   }
 
   // AVL ID 21: GSM Signal (1 byte, 0 - 5 bars)
   let gsmSignal: number | null = null;
-  if (ioElements[21] !== undefined) {
-    gsmSignal = Math.min(5, Math.max(0, Number(ioElements[21].value)));
+  if (ioElements[TELTONIKA_AVL_IDS.GSM_SIGNAL] !== undefined) {
+    gsmSignal = Math.min(5, Math.max(0, Number(ioElements[TELTONIKA_AVL_IDS.GSM_SIGNAL].value)));
   }
 
   return {
@@ -59,9 +68,236 @@ export function extractFmc920Properties(ioElements: Record<number, IOElement>): 
 }
 
 /**
- * Parses a single Teltonika AVL packet from a Buffer slice.
+ * Extracts comprehensive FMC130 telemetry fields and resolves model-specific ignition configuration.
  */
-export function parseSingleTeltonikaPacket(buf: Buffer): ParsePacketResult {
+export function extractFmc130Properties(
+  ioElements: Record<number, IOElement>,
+  ignitionConfig?: DeviceIgnitionConfig,
+  previousIgnitionState?: "ON" | "OFF" | "Unknown"
+): Fmc130TelemetryProperties {
+  // Base properties
+  const base = extractFmc920Properties(ioElements);
+
+  // Digital Inputs (AVL IDs 1, 2, 3)
+  const din1 = ioElements[TELTONIKA_AVL_IDS.DIN1] !== undefined
+    ? Number(ioElements[TELTONIKA_AVL_IDS.DIN1].value)
+    : null;
+  const din2 = ioElements[TELTONIKA_AVL_IDS.DIN2] !== undefined
+    ? Number(ioElements[TELTONIKA_AVL_IDS.DIN2].value)
+    : null;
+  const din3 = ioElements[TELTONIKA_AVL_IDS.DIN3] !== undefined
+    ? Number(ioElements[TELTONIKA_AVL_IDS.DIN3].value)
+    : null;
+
+  // Analog Inputs in mV (AVL IDs 9, 10)
+  const ain1Mv = ioElements[TELTONIKA_AVL_IDS.AIN1] !== undefined
+    ? Number(ioElements[TELTONIKA_AVL_IDS.AIN1].value)
+    : null;
+  const ain2Mv = ioElements[TELTONIKA_AVL_IDS.AIN2] !== undefined
+    ? Number(ioElements[TELTONIKA_AVL_IDS.AIN2].value)
+    : null;
+
+  // Digital Outputs (AVL IDs 179, 180)
+  const dout1 = ioElements[TELTONIKA_AVL_IDS.DOUT1] !== undefined
+    ? Number(ioElements[TELTONIKA_AVL_IDS.DOUT1].value)
+    : null;
+  const dout2 = ioElements[TELTONIKA_AVL_IDS.DOUT2] !== undefined
+    ? Number(ioElements[TELTONIKA_AVL_IDS.DOUT2].value)
+    : null;
+
+  // Engine RPM (AVL ID 85, 2 bytes)
+  const engineRpm = ioElements[TELTONIKA_AVL_IDS.ENGINE_RPM] !== undefined
+    ? Number(ioElements[TELTONIKA_AVL_IDS.ENGINE_RPM].value)
+    : null;
+
+  // Engine Coolant Temperature in °C (AVL ID 115, 1 byte signed)
+  let engineTemp: number | null = null;
+  if (ioElements[TELTONIKA_AVL_IDS.ENGINE_TEMP] !== undefined) {
+    let t = Number(ioElements[TELTONIKA_AVL_IDS.ENGINE_TEMP].value);
+    if (t > 127) t = t - 256;
+    engineTemp = t;
+  }
+
+  // Odometer (AVL ID 16: meters -> km, or AVL ID 87: km)
+  let odometerKm: number | null = null;
+  if (ioElements[TELTONIKA_AVL_IDS.ODOMETER_METERS] !== undefined) {
+    const meters = Number(ioElements[TELTONIKA_AVL_IDS.ODOMETER_METERS].value);
+    odometerKm = Math.round((meters / 1000) * 100) / 100;
+  } else if (ioElements[TELTONIKA_AVL_IDS.TOTAL_MILEAGE] !== undefined) {
+    odometerKm = Number(ioElements[TELTONIKA_AVL_IDS.TOTAL_MILEAGE].value);
+  }
+
+  // Fuel Information
+  let fuelLevel: number | null = null;
+  if (ioElements[TELTONIKA_AVL_IDS.FUEL_LEVEL_PERCENT] !== undefined) {
+    fuelLevel = Number(ioElements[TELTONIKA_AVL_IDS.FUEL_LEVEL_PERCENT].value);
+  } else if (ioElements[TELTONIKA_AVL_IDS.FUEL_LEVEL_LITERS] !== undefined) {
+    fuelLevel = Number(ioElements[TELTONIKA_AVL_IDS.FUEL_LEVEL_LITERS].value);
+  }
+
+  const fuelUsedLiters = ioElements[TELTONIKA_AVL_IDS.FUEL_CONSUMED_LITERS] !== undefined
+    ? Number(ioElements[TELTONIKA_AVL_IDS.FUEL_CONSUMED_LITERS].value)
+    : null;
+
+  // Trip Distance & GNSS Extra
+  const tripDistanceMeters = ioElements[TELTONIKA_AVL_IDS.TRIP_DISTANCE_METERS] !== undefined
+    ? Number(ioElements[TELTONIKA_AVL_IDS.TRIP_DISTANCE_METERS].value)
+    : null;
+  const gnssStatus = ioElements[TELTONIKA_AVL_IDS.GNSS_STATUS] !== undefined
+    ? Number(ioElements[TELTONIKA_AVL_IDS.GNSS_STATUS].value)
+    : null;
+  const gnssPdop = ioElements[TELTONIKA_AVL_IDS.GNSS_PDOP] !== undefined
+    ? Number(ioElements[TELTONIKA_AVL_IDS.GNSS_PDOP].value)
+    : null;
+  const gnssHdop = ioElements[TELTONIKA_AVL_IDS.GNSS_HDOP] !== undefined
+    ? Number(ioElements[TELTONIKA_AVL_IDS.GNSS_HDOP].value)
+    : null;
+
+  // Temperature Sensors & iButton
+  const temperature1 = ioElements[TELTONIKA_AVL_IDS.TEMP_1] !== undefined
+    ? Math.round((Number(ioElements[TELTONIKA_AVL_IDS.TEMP_1].value) / 10) * 10) / 10
+    : null;
+  const temperature2 = ioElements[TELTONIKA_AVL_IDS.TEMP_2] !== undefined
+    ? Math.round((Number(ioElements[TELTONIKA_AVL_IDS.TEMP_2].value) / 10) * 10) / 10
+    : null;
+  const ibutton = ioElements[TELTONIKA_AVL_IDS.IBUTTON] !== undefined
+    ? ioElements[TELTONIKA_AVL_IDS.IBUTTON].value.toString(16).toUpperCase()
+    : null;
+
+  // Configurable Ignition Detection Logic
+  // Never assume AVL ID 239 is always the source without verifying configuration!
+  const source = ignitionConfig?.source || "DIN1";
+  let ignition: "ON" | "OFF" | "Unknown" = "Unknown";
+
+  switch (source) {
+    case "DIN1":
+      if (din1 !== null) {
+        ignition = din1 === 1 ? "ON" : "OFF";
+      } else if (ioElements[TELTONIKA_AVL_IDS.IGNITION] !== undefined) {
+        // Fallback to AVL ID 239 if DIN1 is not sent in this packet
+        ignition = Number(ioElements[TELTONIKA_AVL_IDS.IGNITION].value) === 1 ? "ON" : "OFF";
+      }
+      break;
+
+    case "VOLTAGE": {
+      const highThresh = ignitionConfig?.highVoltageThreshold ?? 13.2;
+      const lowThresh = ignitionConfig?.lowVoltageThreshold ?? 12.8;
+      if (base.externalVoltage !== null) {
+        if (base.externalVoltage >= highThresh) {
+          ignition = "ON";
+        } else if (base.externalVoltage <= lowThresh) {
+          ignition = "OFF";
+        } else {
+          // Hysteresis between lowThresh and highThresh: preserve previous verified state
+          if (previousIgnitionState === "ON" || previousIgnitionState === "OFF") {
+            ignition = previousIgnitionState;
+          } else {
+            ignition = base.externalVoltage >= (highThresh + lowThresh) / 2 ? "ON" : "OFF";
+          }
+        }
+      }
+      break;
+    }
+
+    case "ACCELEROMETER":
+      if (base.movement !== "Unknown") {
+        ignition = base.movement === "Moving" ? "ON" : "OFF";
+      } else if (ioElements[TELTONIKA_AVL_IDS.IGNITION] !== undefined) {
+        ignition = Number(ioElements[TELTONIKA_AVL_IDS.IGNITION].value) === 1 ? "ON" : "OFF";
+      }
+      break;
+
+    case "RPM": {
+      const rpmThresh = ignitionConfig?.rpmThreshold ?? 400;
+      if (engineRpm !== null) {
+        ignition = engineRpm >= rpmThresh ? "ON" : "OFF";
+      }
+      break;
+    }
+
+    case "AUTO_AVL239":
+    default:
+      if (ioElements[TELTONIKA_AVL_IDS.IGNITION] !== undefined) {
+        ignition = Number(ioElements[TELTONIKA_AVL_IDS.IGNITION].value) === 1 ? "ON" : "OFF";
+      } else if (din1 !== null) {
+        ignition = din1 === 1 ? "ON" : "OFF";
+      }
+      break;
+  }
+
+  return {
+    ...base,
+    ignition,
+    odometerKm,
+    fuelLevel,
+    fuelUsedLiters,
+    engineRpm,
+    engineTemp,
+    din1,
+    din2,
+    din3,
+    ain1Mv,
+    ain2Mv,
+    dout1,
+    dout2,
+    tripDistanceMeters,
+    gnssStatus,
+    gnssPdop,
+    gnssHdop,
+    temperature1,
+    temperature2,
+    ibutton,
+    ignitionSourceUsed: source,
+  };
+}
+
+/**
+ * Resolves model-appropriate telemetry properties extractor.
+ */
+export function extractModelProperties(
+  model: string | undefined,
+  ioElements: Record<number, IOElement>,
+  ignitionConfig?: DeviceIgnitionConfig,
+  previousIgnitionState?: "ON" | "OFF" | "Unknown"
+): TelemetryProperties {
+  if (model && model.includes("130")) {
+    return extractFmc130Properties(ioElements, ignitionConfig, previousIgnitionState);
+  }
+  // If custom ignitionConfig is provided, apply it via extractFmc130Properties
+  if (ignitionConfig && ignitionConfig.source !== "AUTO_AVL239") {
+    return extractFmc130Properties(ioElements, ignitionConfig, previousIgnitionState);
+  }
+  const base = extractFmc920Properties(ioElements);
+  return {
+    ...base,
+    odometerKm: null,
+    fuelLevel: null,
+    fuelUsedLiters: null,
+    engineRpm: null,
+    engineTemp: null,
+    din1: null,
+    din2: null,
+    din3: null,
+    ain1Mv: null,
+    ain2Mv: null,
+    dout1: null,
+    dout2: null,
+    tripDistanceMeters: null,
+    gnssStatus: null,
+    gnssPdop: null,
+    gnssHdop: null,
+    temperature1: null,
+    temperature2: null,
+    ibutton: null,
+    ignitionSourceUsed: "AUTO_AVL239",
+  };
+}
+
+/**
+ * Parses a single Teltonika AVL packet from a Buffer slice.
+ * Automatically supports Codec 8 (0x08), Codec 8 Extended (0x8E), and Codec 16 (0x10).
+ */
+export function parseSingleTeltonikaPacket(buf: Buffer, options?: ParsePacketOptions): ParsePacketResult {
   // Minimum possible packet length:
   // 4 (preamble) + 4 (data length) + 1 (codec) + 1 (N1) + 1 (N2) + 4 (crc) = 15 bytes
   if (buf.length < 15) {
@@ -114,12 +350,16 @@ export function parseSingleTeltonikaPacket(buf: Buffer): ParsePacketResult {
     };
   }
 
-  // 5. Inspect Codec ID
+  // 5. Inspect Codec ID (Supports Codec 8, Codec 8 Extended, Codec 16)
   let offset = 0;
   const codecId = payload.readUInt8(offset);
   offset += 1;
 
-  if (codecId !== TELTONIKA_CODECS.CODEC_8 && codecId !== TELTONIKA_CODECS.CODEC_8_EXTENDED) {
+  if (
+    codecId !== TELTONIKA_CODECS.CODEC_8 &&
+    codecId !== TELTONIKA_CODECS.CODEC_8_EXTENDED &&
+    codecId !== TELTONIKA_CODECS.CODEC_16
+  ) {
     return {
       success: false,
       error: `Unsupported Teltonika codec: 0x${codecId.toString(16)}`,
@@ -129,8 +369,13 @@ export function parseSingleTeltonikaPacket(buf: Buffer): ParsePacketResult {
     };
   }
 
-  const isExtended = codecId === TELTONIKA_CODECS.CODEC_8_EXTENDED;
-  const codecName = isExtended ? "Codec 8 Extended" : "Codec 8";
+  const isExtended = codecId === TELTONIKA_CODECS.CODEC_8_EXTENDED || codecId === TELTONIKA_CODECS.CODEC_16;
+  const codecName =
+    codecId === TELTONIKA_CODECS.CODEC_16
+      ? "Codec 16"
+      : codecId === TELTONIKA_CODECS.CODEC_8_EXTENDED
+      ? "Codec 8 Extended"
+      : "Codec 8";
 
   // 6. Record Count N1
   const recordCountN1 = payload.readUInt8(offset);
@@ -200,6 +445,7 @@ export function parseSingleTeltonikaPacket(buf: Buffer): ParsePacketResult {
     let totalIoCount = 0;
 
     if (isExtended) {
+      // Codec 8 Extended (0x8E) and Codec 16 (0x10) use 2-byte IDs and 2-byte counts
       eventIoId = payload.readUInt16BE(offset);
       offset += 2;
       totalIoCount = payload.readUInt16BE(offset);
@@ -250,19 +496,22 @@ export function parseSingleTeltonikaPacket(buf: Buffer): ParsePacketResult {
       }
 
       // X-byte (variable length) elements
-      const countX = payload.readUInt16BE(offset);
-      offset += 2;
-      for (let i = 0; i < countX; i++) {
-        const id = payload.readUInt16BE(offset);
+      // If remaining payload before N2 has at least 2 bytes for variable element count
+      if (offset + 2 <= payload.length - 1) {
+        const countX = payload.readUInt16BE(offset);
         offset += 2;
-        const len = payload.readUInt16BE(offset);
-        offset += 2;
-        // In real cases len bytes payload
-        offset += len;
-        ioElements[id] = { id, length: len, value: 0 };
+        for (let i = 0; i < countX; i++) {
+          const id = payload.readUInt16BE(offset);
+          offset += 2;
+          const len = payload.readUInt16BE(offset);
+          offset += 2;
+          const rawBuffer = payload.subarray(offset, offset + len);
+          offset += len;
+          ioElements[id] = { id, length: len, value: 0, rawBuffer };
+        }
       }
     } else {
-      // Standard Codec 8
+      // Standard Codec 8 (0x08)
       eventIoId = payload.readUInt8(offset);
       offset += 1;
       totalIoCount = payload.readUInt8(offset);
@@ -313,7 +562,13 @@ export function parseSingleTeltonikaPacket(buf: Buffer): ParsePacketResult {
       }
     }
 
-    const properties = extractFmc920Properties(ioElements);
+    // Extract telemetry properties according to device model & ignition config
+    const properties = extractModelProperties(
+      options?.model,
+      ioElements,
+      options?.ignitionConfig,
+      options?.previousIgnitionState
+    );
 
     records.push({
       timestamp,
@@ -372,7 +627,10 @@ export function parseSingleTeltonikaPacket(buf: Buffer): ParsePacketResult {
  * Handles TCP streaming data chunks, extracting any complete packets.
  * Returns parsed packets and unconsumed buffer bytes.
  */
-export function extractPacketsFromStream(streamBuffer: Buffer): {
+export function extractPacketsFromStream(
+  streamBuffer: Buffer,
+  options?: ParsePacketOptions
+): {
   packets: ParsedAvlPacket[];
   errors: { error: string; errorType: string; rawHex?: string }[];
   remainingBuffer: Buffer;
@@ -382,7 +640,7 @@ export function extractPacketsFromStream(streamBuffer: Buffer): {
   let current = streamBuffer;
 
   while (current.length >= 15) {
-    const result = parseSingleTeltonikaPacket(current);
+    const result = parseSingleTeltonikaPacket(current, options);
     if (result.success) {
       packets.push(result.packet);
       current = current.subarray(result.consumedBytes);

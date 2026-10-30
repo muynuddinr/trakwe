@@ -13,6 +13,11 @@ export interface RegisteredDevice {
   firmware_version: string;
   sim_carrier: string;
   reporting_interval_sec: number;
+  ignition_source?: string;
+  ignition_high_threshold?: number;
+  ignition_low_threshold?: number;
+  ignition_rpm_threshold?: number;
+  telemetry_profile?: any;
   last_connection_at: string | null;
   last_communication_at: string | null;
   created_at: string;
@@ -56,6 +61,7 @@ export class DeviceRepository {
     orgId?: string;
     vehicleIds?: string[];
     status?: string;
+    model?: string;
     search?: string;
     limit?: number;
     offset?: number;
@@ -80,10 +86,17 @@ export class DeviceRepository {
       params.push(filter.status.toLowerCase());
     }
 
+    if (filter.model && filter.model !== "All") {
+      conditions.push(`(d.model = $${pIdx} OR d.model LIKE $${pIdx + 1})`);
+      params.push(filter.model);
+      params.push(`%${filter.model.replace("Teltonika", "").trim()}%`);
+      pIdx += 2;
+    }
+
     if (filter.search && filter.search.trim()) {
       const q = `%${filter.search.trim().toLowerCase()}%`;
       conditions.push(
-        `(LOWER(d.id) LIKE $${pIdx} OR LOWER(d.imei) LIKE $${pIdx} OR LOWER(COALESCE(v.registration, '')) LIKE $${pIdx} OR LOWER(COALESCE(v.driver, '')) LIKE $${pIdx})`
+        `(LOWER(d.id) LIKE $${pIdx} OR LOWER(d.imei) LIKE $${pIdx} OR LOWER(COALESCE(v.registration, '')) LIKE $${pIdx} OR LOWER(COALESCE(v.driver, '')) LIKE $${pIdx} OR LOWER(d.model) LIKE $${pIdx})`
       );
       params.push(q);
       pIdx++;
@@ -110,6 +123,7 @@ export class DeviceRepository {
     orgId?: string;
     vehicleIds?: string[];
     status?: string;
+    model?: string;
     search?: string;
   }): Promise<number> {
     const conditions: string[] = [];
@@ -132,10 +146,17 @@ export class DeviceRepository {
       params.push(filter.status.toLowerCase());
     }
 
+    if (filter.model && filter.model !== "All") {
+      conditions.push(`(d.model = $${pIdx} OR d.model LIKE $${pIdx + 1})`);
+      params.push(filter.model);
+      params.push(`%${filter.model.replace("Teltonika", "").trim()}%`);
+      pIdx += 2;
+    }
+
     if (filter.search && filter.search.trim()) {
       const q = `%${filter.search.trim().toLowerCase()}%`;
       conditions.push(
-        `(LOWER(d.id) LIKE $${pIdx} OR LOWER(d.imei) LIKE $${pIdx} OR LOWER(COALESCE(v.registration, '')) LIKE $${pIdx} OR LOWER(COALESCE(v.driver, '')) LIKE $${pIdx})`
+        `(LOWER(d.id) LIKE $${pIdx} OR LOWER(d.imei) LIKE $${pIdx} OR LOWER(COALESCE(v.registration, '')) LIKE $${pIdx} OR LOWER(COALESCE(v.driver, '')) LIKE $${pIdx} OR LOWER(d.model) LIKE $${pIdx})`
       );
       params.push(q);
       pIdx++;
@@ -166,27 +187,52 @@ export class DeviceRepository {
     firmwareVersion?: string;
     simCarrier?: string;
     reportingIntervalSec?: number;
+    ignitionSource?: string;
+    ignitionHighThreshold?: number;
+    ignitionLowThreshold?: number;
+    ignitionRpmThreshold?: number;
+    telemetryProfile?: any;
   }): Promise<RegisteredDevice> {
-    const id = device.id || `dev-${device.imei.slice(-6)}`;
+    const rawImei = device.imei.trim();
+    const id = device.id || `dev-${rawImei.slice(-6)}`;
     const now = new Date().toISOString();
+
+    const isFmc130 = (device.model || "").includes("130");
+    const model = device.model || (isFmc130 ? "Teltonika FMC130" : "Teltonika FMC920");
+    const protocol = device.protocol || (isFmc130 ? "Teltonika Codec 8 / 8E / 16" : "Teltonika Codec 8 / 8E");
+    const codec = device.codec || (isFmc130 ? "Codec 8 / Codec 8 Extended" : "Codec 8");
+    const firmwareVersion = device.firmwareVersion || (isFmc130 ? "03.28.03.Rev.02" : "03.28.02.Rev.00");
+    const ignitionSource = device.ignitionSource || "DIN1";
+    const ignitionHighThreshold = device.ignitionHighThreshold ?? 13.2;
+    const ignitionLowThreshold = device.ignitionLowThreshold ?? 12.8;
+    const ignitionRpmThreshold = device.ignitionRpmThreshold ?? 400;
+    const telemetryProfileStr = typeof device.telemetryProfile === "object"
+      ? JSON.stringify(device.telemetryProfile)
+      : (device.telemetryProfile || "{}");
 
     await this.db.execute(
       `INSERT INTO registered_devices
-       (id, imei, manufacturer, model, protocol, codec, org_id, vehicle_id, status, firmware_version, sim_carrier, reporting_interval_sec, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+       (id, imei, manufacturer, model, protocol, codec, org_id, vehicle_id, status, firmware_version, sim_carrier, reporting_interval_sec,
+        ignition_source, ignition_high_threshold, ignition_low_threshold, ignition_rpm_threshold, telemetry_profile, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
       [
         id,
-        device.imei.trim(),
+        rawImei,
         device.manufacturer || "Teltonika",
-        device.model || "Teltonika FMC920",
-        device.protocol || "Teltonika Codec 8 / 8E",
-        device.codec || "Codec 8",
+        model,
+        protocol,
+        codec,
         device.orgId,
         device.vehicleId || null,
         device.status || "active",
-        device.firmwareVersion || "03.28.02.Rev.00",
+        firmwareVersion,
         device.simCarrier || "e& (Etisalat) UAE",
         device.reportingIntervalSec || 60,
+        ignitionSource,
+        ignitionHighThreshold,
+        ignitionLowThreshold,
+        ignitionRpmThreshold,
+        telemetryProfileStr,
         now,
         now,
       ]
@@ -201,9 +247,16 @@ export class DeviceRepository {
     vehicleId: string | null;
     status: "active" | "disabled" | "revoked";
     model: string;
+    protocol: string;
+    codec: string;
     firmwareVersion: string;
     reportingIntervalSec: number;
     simCarrier: string;
+    ignitionSource: string;
+    ignitionHighThreshold: number;
+    ignitionLowThreshold: number;
+    ignitionRpmThreshold: number;
+    telemetryProfile: any;
   }>): Promise<RegisteredDevice | null> {
     const fields: string[] = [];
     const params: unknown[] = [];
@@ -224,6 +277,16 @@ export class DeviceRepository {
       params.push(updates.model);
     }
 
+    if (updates.protocol !== undefined) {
+      fields.push(`protocol = $${pIdx++}`);
+      params.push(updates.protocol);
+    }
+
+    if (updates.codec !== undefined) {
+      fields.push(`codec = $${pIdx++}`);
+      params.push(updates.codec);
+    }
+
     if (updates.firmwareVersion !== undefined) {
       fields.push(`firmware_version = $${pIdx++}`);
       params.push(updates.firmwareVersion);
@@ -237,6 +300,35 @@ export class DeviceRepository {
     if (updates.simCarrier !== undefined) {
       fields.push(`sim_carrier = $${pIdx++}`);
       params.push(updates.simCarrier);
+    }
+
+    if (updates.ignitionSource !== undefined) {
+      fields.push(`ignition_source = $${pIdx++}`);
+      params.push(updates.ignitionSource);
+    }
+
+    if (updates.ignitionHighThreshold !== undefined) {
+      fields.push(`ignition_high_threshold = $${pIdx++}`);
+      params.push(updates.ignitionHighThreshold);
+    }
+
+    if (updates.ignitionLowThreshold !== undefined) {
+      fields.push(`ignition_low_threshold = $${pIdx++}`);
+      params.push(updates.ignitionLowThreshold);
+    }
+
+    if (updates.ignitionRpmThreshold !== undefined) {
+      fields.push(`ignition_rpm_threshold = $${pIdx++}`);
+      params.push(updates.ignitionRpmThreshold);
+    }
+
+    if (updates.telemetryProfile !== undefined) {
+      fields.push(`telemetry_profile = $${pIdx++}`);
+      params.push(
+        typeof updates.telemetryProfile === "object"
+          ? JSON.stringify(updates.telemetryProfile)
+          : updates.telemetryProfile
+      );
     }
 
     if (fields.length === 0) {

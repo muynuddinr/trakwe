@@ -82,6 +82,11 @@ class SqliteDatabaseClient implements IDatabaseClient {
         firmware_version TEXT DEFAULT '03.28.02.Rev.00',
         sim_carrier TEXT DEFAULT 'e& (Etisalat) UAE',
         reporting_interval_sec INTEGER NOT NULL DEFAULT 60,
+        ignition_source TEXT DEFAULT 'DIN1',
+        ignition_high_threshold REAL DEFAULT 13.2,
+        ignition_low_threshold REAL DEFAULT 12.8,
+        ignition_rpm_threshold INTEGER DEFAULT 400,
+        telemetry_profile TEXT DEFAULT '{}',
         last_connection_at TEXT,
         last_communication_at TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -91,6 +96,7 @@ class SqliteDatabaseClient implements IDatabaseClient {
       CREATE INDEX IF NOT EXISTS idx_devices_imei ON registered_devices(imei);
       CREATE INDEX IF NOT EXISTS idx_devices_org ON registered_devices(org_id);
       CREATE INDEX IF NOT EXISTS idx_devices_veh ON registered_devices(vehicle_id);
+      CREATE INDEX IF NOT EXISTS idx_devices_model ON registered_devices(model);
 
       CREATE TABLE IF NOT EXISTS device_sessions (
         id TEXT PRIMARY KEY,
@@ -124,6 +130,17 @@ class SqliteDatabaseClient implements IDatabaseClient {
         external_voltage REAL,
         internal_battery_voltage REAL,
         gsm_signal INTEGER,
+        odometer_km REAL,
+        fuel_level REAL,
+        fuel_used_liters REAL,
+        engine_rpm INTEGER,
+        engine_temp INTEGER,
+        din1 INTEGER,
+        din2 INTEGER,
+        din3 INTEGER,
+        ain1_mv INTEGER,
+        ain2_mv INTEGER,
+        io_elements TEXT,
         raw_payload_hex TEXT,
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -147,6 +164,16 @@ class SqliteDatabaseClient implements IDatabaseClient {
         external_voltage REAL,
         internal_battery_voltage REAL,
         gsm_signal INTEGER,
+        odometer_km REAL,
+        fuel_level REAL,
+        fuel_used_liters REAL,
+        engine_rpm INTEGER,
+        engine_temp INTEGER,
+        din1 INTEGER,
+        din2 INTEGER,
+        din3 INTEGER,
+        ain1_mv INTEGER,
+        ain2_mv INTEGER,
         io_elements TEXT,
         codec_id TEXT NOT NULL DEFAULT '0x08',
         raw_payload_hex TEXT,
@@ -204,7 +231,48 @@ class SqliteDatabaseClient implements IDatabaseClient {
       );
     `);
 
+    this.runSafeSqliteMigrations();
     this.seedFleetContext();
+  }
+
+  private runSafeSqliteMigrations() {
+    const alterStatements = [
+      "ALTER TABLE registered_devices ADD COLUMN ignition_source TEXT DEFAULT 'DIN1'",
+      "ALTER TABLE registered_devices ADD COLUMN ignition_high_threshold REAL DEFAULT 13.2",
+      "ALTER TABLE registered_devices ADD COLUMN ignition_low_threshold REAL DEFAULT 12.8",
+      "ALTER TABLE registered_devices ADD COLUMN ignition_rpm_threshold INTEGER DEFAULT 400",
+      "ALTER TABLE registered_devices ADD COLUMN telemetry_profile TEXT DEFAULT '{}'",
+      "ALTER TABLE device_latest_telemetry ADD COLUMN odometer_km REAL",
+      "ALTER TABLE device_latest_telemetry ADD COLUMN fuel_level REAL",
+      "ALTER TABLE device_latest_telemetry ADD COLUMN fuel_used_liters REAL",
+      "ALTER TABLE device_latest_telemetry ADD COLUMN engine_rpm INTEGER",
+      "ALTER TABLE device_latest_telemetry ADD COLUMN engine_temp INTEGER",
+      "ALTER TABLE device_latest_telemetry ADD COLUMN din1 INTEGER",
+      "ALTER TABLE device_latest_telemetry ADD COLUMN din2 INTEGER",
+      "ALTER TABLE device_latest_telemetry ADD COLUMN din3 INTEGER",
+      "ALTER TABLE device_latest_telemetry ADD COLUMN ain1_mv INTEGER",
+      "ALTER TABLE device_latest_telemetry ADD COLUMN ain2_mv INTEGER",
+      "ALTER TABLE device_latest_telemetry ADD COLUMN io_elements TEXT",
+      "ALTER TABLE historical_telemetry ADD COLUMN odometer_km REAL",
+      "ALTER TABLE historical_telemetry ADD COLUMN fuel_level REAL",
+      "ALTER TABLE historical_telemetry ADD COLUMN fuel_used_liters REAL",
+      "ALTER TABLE historical_telemetry ADD COLUMN engine_rpm INTEGER",
+      "ALTER TABLE historical_telemetry ADD COLUMN engine_temp INTEGER",
+      "ALTER TABLE historical_telemetry ADD COLUMN din1 INTEGER",
+      "ALTER TABLE historical_telemetry ADD COLUMN din2 INTEGER",
+      "ALTER TABLE historical_telemetry ADD COLUMN din3 INTEGER",
+      "ALTER TABLE historical_telemetry ADD COLUMN ain1_mv INTEGER",
+      "ALTER TABLE historical_telemetry ADD COLUMN ain2_mv INTEGER",
+      "CREATE INDEX IF NOT EXISTS idx_devices_model ON registered_devices(model)"
+    ];
+
+    for (const sql of alterStatements) {
+      try {
+        this.db.exec(sql);
+      } catch {
+        // Column or index already exists in table
+      }
+    }
   }
 
   private seedFleetContext() {

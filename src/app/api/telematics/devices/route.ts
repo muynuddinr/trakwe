@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const search = searchParams.get("search") || "";
   const status = searchParams.get("status") || "All";
+  const model = searchParams.get("model") || "All";
   const page = Math.max(0, parseInt(searchParams.get("page") || "0", 10));
   const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "10", 10)));
 
@@ -42,6 +43,7 @@ export async function GET(req: NextRequest) {
       orgId: filterOrgId,
       vehicleIds: filterVehicleIds,
       status,
+      model,
       search,
       limit,
       offset: page * limit,
@@ -50,6 +52,7 @@ export async function GET(req: NextRequest) {
       orgId: filterOrgId,
       vehicleIds: filterVehicleIds,
       status,
+      model,
       search,
     }),
   ]);
@@ -85,7 +88,22 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { imei, model, vehicleId, reportingIntervalSec, simCarrier } = body;
+    const {
+      imei,
+      manufacturer,
+      model,
+      protocol,
+      codec,
+      status,
+      vehicleId,
+      reportingIntervalSec,
+      simCarrier,
+      ignitionSource,
+      ignitionHighThreshold,
+      ignitionLowThreshold,
+      ignitionRpmThreshold,
+      telemetryProfile,
+    } = body;
 
     if (!imei || typeof imei !== "string" || !/^\d{8,20}$/.test(imei.trim())) {
       return NextResponse.json(
@@ -104,17 +122,26 @@ export async function POST(req: NextRequest) {
     }
 
     // Tenant isolation: Admin can only register devices in their own organization
-    const orgId = user.role === "Super Admin" ? body.orgId || "org-dubai" : user.orgId;
+    const orgId = user.role === "Super Admin" ? body.orgId || user.orgId || "org-dubai" : user.orgId;
+
+    const isFmc130 = (model || "").includes("130");
 
     const created = await deviceRepo.create({
       imei: imei.trim(),
-      model: model || "Teltonika FMC920",
-      protocol: "Teltonika Codec 8 / 8E",
-      codec: "Codec 8",
+      manufacturer: manufacturer || "Teltonika",
+      model: model || (isFmc130 ? "Teltonika FMC130" : "Teltonika FMC920"),
+      protocol: protocol || (isFmc130 ? "Teltonika Codec 8 / 8E / 16" : "Teltonika Codec 8 / 8E"),
+      codec: codec || (isFmc130 ? "Codec 8 / Codec 8 Extended" : "Codec 8"),
+      status: status || "active",
       orgId,
       vehicleId: vehicleId || null,
       reportingIntervalSec: reportingIntervalSec ? Number(reportingIntervalSec) : 60,
       simCarrier: simCarrier || "e& (Etisalat) UAE",
+      ignitionSource: ignitionSource || "DIN1",
+      ignitionHighThreshold: ignitionHighThreshold ? Number(ignitionHighThreshold) : 13.2,
+      ignitionLowThreshold: ignitionLowThreshold ? Number(ignitionLowThreshold) : 12.8,
+      ignitionRpmThreshold: ignitionRpmThreshold ? Number(ignitionRpmThreshold) : 400,
+      telemetryProfile: telemetryProfile || {},
     });
 
     return NextResponse.json({ data: created }, { status: 201 });

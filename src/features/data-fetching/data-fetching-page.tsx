@@ -90,11 +90,20 @@ export function DataFetchingPage() {
 
   // Registration Modal State
   const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [regManufacturer, setRegManufacturer] = useState("Teltonika");
+  const [regModel, setRegModel] = useState("Teltonika FMC130");
   const [regImei, setRegImei] = useState("");
-  const [regModel, setRegModel] = useState("Teltonika FMC920");
   const [regVehicleId, setRegVehicleId] = useState("");
+  const [regOrgId, setRegOrgId] = useState("");
+  const [regProtocol, setRegProtocol] = useState("Teltonika Codec 8 / 8E / 16");
+  const [regCodec, setRegCodec] = useState("Codec 8 / Codec 8 Extended");
+  const [regStatus, setRegStatus] = useState("active");
   const [regInterval, setRegInterval] = useState("60");
   const [regCarrier, setRegCarrier] = useState("e& (Etisalat) UAE");
+  const [regIgnitionSource, setRegIgnitionSource] = useState("DIN1");
+  const [regHighVoltage, setRegHighVoltage] = useState("13.2");
+  const [regLowVoltage, setRegLowVoltage] = useState("12.8");
+  const [regRpmThreshold, setRegRpmThreshold] = useState("400");
   const [regSubmitting, setRegSubmitting] = useState(false);
   const [regError, setRegError] = useState<string | null>(null);
 
@@ -109,6 +118,8 @@ export function DataFetchingPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [protocolFilter, setProtocolFilter] = useState("All");
   const [modelFilter, setModelFilter] = useState("All");
+  const [deviceIgnitionFilter, setDeviceIgnitionFilter] = useState("All");
+  const [deviceVehicleFilter, setDeviceVehicleFilter] = useState("All");
   const [devicePage, setDevicePage] = useState(0);
 
   // Filters for Ignition Monitor
@@ -182,9 +193,17 @@ export function DataFetchingPage() {
       const connStatus =
         d.status === "disabled" ? "Disconnected" : isConnected ? "Connected" : "Disconnected";
 
+      // Evaluate verified ignition with stale threshold (10 minutes)
+      const lastTelemMs = d.latestTelemetry?.device_timestamp ? new Date(d.latestTelemetry.device_timestamp).getTime() : 0;
+      const isStale = lastTelemMs === 0 || Date.now() - lastTelemMs > 10 * 60 * 1000;
+      const rawIgn = d.latestTelemetry?.ignition ?? "Unknown";
+      const displayIgnition: "ON" | "OFF" | "Unknown" | "Stale" =
+        rawIgn === "Unknown" ? "Unknown" : isStale ? "Stale" : rawIgn;
+
       return {
         deviceId: d.id,
-        deviceModel: (d.model as any) || "Teltonika FMC920",
+        manufacturer: d.manufacturer || "Teltonika",
+        deviceModel: d.model || "Teltonika FMC130",
         protocol: d.protocol || "Teltonika Codec 8 / 8E",
         vehicleReg: d.vehicle_registration || "Unassigned",
         vehicleName: d.vehicle_name || "Unassigned Vehicle",
@@ -211,16 +230,23 @@ export function DataFetchingPage() {
         serialNumber: d.id,
         satellites: d.latestTelemetry?.satellites ?? 0,
         hdop: 1.1,
-        odometer: 0,
-        ignition: d.latestTelemetry?.ignition ?? "Unknown",
-        rpm: 0,
+        odometer: d.latestTelemetry?.odometer_km ?? 0,
+        ignition: displayIgnition,
+        ignitionSource: d.ignition_source || "DIN1",
+        rpm: d.latestTelemetry?.engine_rpm ?? 0,
         speed: d.latestTelemetry?.speed ?? 0,
         voltageExt: d.latestTelemetry?.external_voltage ?? 0,
         voltageInt: d.latestTelemetry?.internal_battery_voltage ?? 0,
         lat: d.latestTelemetry?.lat,
         lng: d.latestTelemetry?.lng,
-        fuel: 0,
-        temperature: null,
+        fuel: d.latestTelemetry?.fuel_level ?? 0,
+        temperature: d.latestTelemetry?.engine_temp ?? null,
+        din1: d.latestTelemetry?.din1 ?? null,
+        din2: d.latestTelemetry?.din2 ?? null,
+        din3: d.latestTelemetry?.din3 ?? null,
+        ain1Mv: d.latestTelemetry?.ain1_mv ?? null,
+        ain2Mv: d.latestTelemetry?.ain2_mv ?? null,
+        ioElements: d.latestTelemetry?.io_elements ?? null,
         rawPayloadHex: d.latestTelemetry?.raw_payload_hex || "",
         config: {
           reportingIntervalSec: d.reporting_interval_sec,
@@ -338,17 +364,33 @@ export function DataFetchingPage() {
   async function handleRegisterDevice(e: React.FormEvent) {
     e.preventDefault();
     setRegError(null);
+
+    const cleanImei = regImei.trim();
+    if (!/^\d{8,20}$/.test(cleanImei)) {
+      setRegError("Invalid IMEI. IMEI must contain 8 to 20 numeric characters (standard 15 digits).");
+      return;
+    }
+
     setRegSubmitting(true);
     try {
       await telematicsApi.registerDevice({
-        imei: regImei.trim(),
+        imei: cleanImei,
+        manufacturer: regManufacturer,
         model: regModel,
+        protocol: regProtocol,
+        codec: regCodec,
         vehicleId: regVehicleId || null,
+        orgId: regOrgId || undefined,
+        status: regStatus,
         reportingIntervalSec: parseInt(regInterval, 10) || 60,
         simCarrier: regCarrier,
+        ignitionSource: regIgnitionSource,
+        ignitionHighThreshold: parseFloat(regHighVoltage) || 13.2,
+        ignitionLowThreshold: parseFloat(regLowVoltage) || 12.8,
+        ignitionRpmThreshold: parseInt(regRpmThreshold, 10) || 400,
       });
 
-      setNotice(`Device with IMEI ${regImei.trim()} registered successfully!`);
+      setNotice(`Device ${regModel} with IMEI ${cleanImei} registered successfully!`);
       setShowRegisterModal(false);
       setRegImei("");
       setRegVehicleId("");
@@ -409,13 +451,24 @@ export function DataFetchingPage() {
         d.deviceId.toLowerCase().includes(searchDevice.toLowerCase()) ||
         d.vehicleReg.toLowerCase().includes(searchDevice.toLowerCase()) ||
         d.driver.toLowerCase().includes(searchDevice.toLowerCase()) ||
-        d.imei.includes(searchDevice);
+        d.imei.includes(searchDevice) ||
+        (d.deviceModel && d.deviceModel.toLowerCase().includes(searchDevice.toLowerCase()));
+
       const matchStatus = statusFilter === "All" || d.connectionStatus === statusFilter;
       const matchProtocol = protocolFilter === "All" || d.protocol.toLowerCase().includes(protocolFilter.toLowerCase());
-      const matchModel = modelFilter === "All" || d.deviceModel === modelFilter;
-      return matchSearch && matchStatus && matchProtocol && matchModel;
+      const matchModel =
+        modelFilter === "All" ||
+        (modelFilter === "Teltonika FMC920" && d.deviceModel.includes("920")) ||
+        (modelFilter === "Teltonika FMC130" && d.deviceModel.includes("130")) ||
+        (modelFilter === "FMC920" && d.deviceModel.includes("920")) ||
+        (modelFilter === "FMC130" && d.deviceModel.includes("130")) ||
+        d.deviceModel === modelFilter;
+      const matchIgnition = deviceIgnitionFilter === "All" || d.ignition === deviceIgnitionFilter;
+      const matchVehicle = deviceVehicleFilter === "All" || d.vehicleReg === deviceVehicleFilter;
+
+      return matchSearch && matchStatus && matchProtocol && matchModel && matchIgnition && matchVehicle;
     });
-  }, [activeDevices, searchDevice, statusFilter, protocolFilter, modelFilter]);
+  }, [activeDevices, searchDevice, statusFilter, protocolFilter, modelFilter, deviceIgnitionFilter, deviceVehicleFilter]);
 
   const devicePageCount = Math.max(1, Math.ceil(filteredDevices.length / 8));
   const pagedDevices = filteredDevices.slice(devicePage * 8, (devicePage + 1) * 8);
@@ -691,10 +744,39 @@ export function DataFetchingPage() {
                 aria-label="Filter model"
               >
                 <option value="All">All Hardware Models</option>
-                <option value="Teltonika FMC920">Teltonika FMC920</option>
                 <option value="Teltonika FMC130">Teltonika FMC130</option>
-                <option value="Queclink GV300">Queclink GV300</option>
-                <option value="Meitrack T333">Meitrack T333</option>
+                <option value="Teltonika FMC920">Teltonika FMC920</option>
+              </select>
+
+              <select
+                value={deviceIgnitionFilter}
+                onChange={(e) => {
+                  setDeviceIgnitionFilter(e.target.value);
+                  setDevicePage(0);
+                }}
+                aria-label="Filter ignition"
+              >
+                <option value="All">All Ignition States</option>
+                <option value="ON">Ignition ON</option>
+                <option value="OFF">Ignition OFF</option>
+                <option value="Stale">Stale Data</option>
+                <option value="Unknown">Unknown State</option>
+              </select>
+
+              <select
+                value={deviceVehicleFilter}
+                onChange={(e) => {
+                  setDeviceVehicleFilter(e.target.value);
+                  setDevicePage(0);
+                }}
+                aria-label="Filter vehicle"
+              >
+                <option value="All">All Vehicles</option>
+                {workspaceVehicles.map((v) => (
+                  <option key={v.id} value={v.registration}>
+                    {v.registration} ({v.name})
+                  </option>
+                ))}
               </select>
 
               <select
@@ -706,13 +788,13 @@ export function DataFetchingPage() {
                 aria-label="Filter protocol"
               >
                 <option value="All">All Protocols</option>
-                <option value="Teltonika">Teltonika Codec 8 / 8E</option>
+                <option value="Teltonika">Teltonika Codec 8 / 8E / 16</option>
                 <option value="Queclink">Queclink @Track</option>
                 <option value="Meitrack">Meitrack GPRS</option>
               </select>
             </div>
 
-            {(searchDevice || statusFilter !== "All" || modelFilter !== "All" || protocolFilter !== "All") && (
+            {(searchDevice || statusFilter !== "All" || modelFilter !== "All" || protocolFilter !== "All" || deviceIgnitionFilter !== "All" || deviceVehicleFilter !== "All") && (
               <button
                 className="text-button"
                 onClick={() => {
@@ -720,6 +802,8 @@ export function DataFetchingPage() {
                   setStatusFilter("All");
                   setModelFilter("All");
                   setProtocolFilter("All");
+                  setDeviceIgnitionFilter("All");
+                  setDeviceVehicleFilter("All");
                   setDevicePage(0);
                 }}
               >
@@ -737,12 +821,12 @@ export function DataFetchingPage() {
               </div>
               <h3 className="df-empty-title">Device Registry is Empty</h3>
               <p className="df-empty-sub">
-                No GPS trackers are registered in the backend database yet. Register a Teltonika FMC920 tracker with its 15-digit IMEI to authorize incoming TCP socket connections and start persisting real AVL telemetry.
+                No GPS trackers are registered in the backend database yet. Register a Teltonika FMC130 or FMC920 tracker with its 15-digit IMEI to authorize incoming TCP socket connections and start persisting real AVL telemetry.
               </p>
               {account?.role !== "Employee" && (
                 <button className="button primary" onClick={() => setShowRegisterModal(true)}>
                   <Plus size={15} />
-                  Register First Teltonika FMC920
+                  Register Teltonika GPS Device
                 </button>
               )}
             </div>
@@ -757,7 +841,8 @@ export function DataFetchingPage() {
                     <th>Device ID</th>
                     <th>IMEI</th>
                     <th>Hardware Model</th>
-                    <th>Protocol</th>
+                    <th>Ignition</th>
+                    <th>Voltages</th>
                     <th>Assigned Vehicle</th>
                     <th>Live GPS / Fix Status</th>
                     <th>Status</th>
@@ -783,14 +868,41 @@ export function DataFetchingPage() {
                       </td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <Cpu size={14} style={{ color: "var(--muted)" }} />
-                          <span>{dev.deviceModel}</span>
+                          <Cpu size={14} style={{ color: dev.deviceModel.includes("130") ? "#6366f1" : "#0284c7" }} />
+                          <div>
+                            <span style={{ fontWeight: 600 }}>{dev.deviceModel}</span>
+                            <div style={{ fontSize: 10, color: "var(--muted)" }}>
+                              {dev.manufacturer || "Teltonika"} · {dev.deviceModel.includes("130") ? "Codec 8/8E/16" : "Codec 8/8E"}
+                            </div>
+                          </div>
                         </div>
                       </td>
                       <td>
-                        <small style={{ color: "var(--text-secondary)", fontFamily: "monospace" }}>
-                          {dev.protocol}
-                        </small>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          <span
+                            className={`badge ${
+                              dev.ignition === "ON"
+                                ? "moving"
+                                : dev.ignition === "OFF"
+                                  ? "idle"
+                                  : dev.ignition === "Stale"
+                                    ? "warning"
+                                    : "danger"
+                            }`}
+                            style={{ fontSize: 11, fontWeight: 700 }}
+                          >
+                            <Power size={11} /> {dev.ignition === "ON" ? "ON" : dev.ignition === "OFF" ? "OFF" : dev.ignition === "Stale" ? "STALE" : "UNKNOWN"}
+                          </span>
+                          <span style={{ fontSize: 10, color: "var(--muted)" }}>
+                            Src: {dev.ignitionSource || "DIN1"}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: 11, fontFamily: "monospace" }}>
+                          <div>Ext: <b>{dev.voltageExt ? `${dev.voltageExt.toFixed(1)}V` : "—"}</b></div>
+                          <div style={{ color: "var(--muted)" }}>Bat: {dev.voltageInt ? `${dev.voltageInt.toFixed(2)}V` : "—"}</div>
+                        </div>
                       </td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -1354,13 +1466,55 @@ export function DataFetchingPage() {
             </div>
           )}
 
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                Manufacturer *
+              </label>
+              <select
+                className="select"
+                style={{ width: "100%" }}
+                value={regManufacturer}
+                onChange={(e) => setRegManufacturer(e.target.value)}
+              >
+                <option value="Teltonika">Teltonika Telematics</option>
+                <option value="Queclink">Queclink Wireless</option>
+                <option value="Meitrack">Meitrack Group</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                Hardware Model *
+              </label>
+              <select
+                className="select"
+                style={{ width: "100%", fontWeight: 600 }}
+                value={regModel}
+                onChange={(e) => {
+                  const m = e.target.value;
+                  setRegModel(m);
+                  if (m.includes("130")) {
+                    setRegProtocol("Teltonika Codec 8 / 8E / 16");
+                    setRegCodec("Codec 8 / Codec 8 Extended");
+                  } else {
+                    setRegProtocol("Teltonika Codec 8 / 8E");
+                    setRegCodec("Codec 8");
+                  }
+                }}
+              >
+                <option value="Teltonika FMC130">Teltonika FMC130 (Advanced 4G LTE Cat 1 + Inputs)</option>
+                <option value="Teltonika FMC920">Teltonika FMC920 (Compact 4G LTE Cat 1 / GNSS)</option>
+              </select>
+            </div>
+          </div>
+
           <div>
             <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
-              Device IMEI Number (15 digits) *
+              Device IMEI Number (15 numeric digits) *
             </label>
             <input
               className="input"
-              style={{ width: "100%", fontFamily: "monospace" }}
+              style={{ width: "100%", fontFamily: "monospace", letterSpacing: "1px" }}
               placeholder="e.g. 864275048912345"
               value={regImei}
               onChange={(e) => setRegImei(e.target.value)}
@@ -1368,43 +1522,168 @@ export function DataFetchingPage() {
               maxLength={20}
             />
             <small style={{ color: "var(--muted)", fontSize: 11 }}>
-              The device will be accepted during Phase 1 TCP handshake only if this IMEI matches.
+              Unique Teltonika hardware IMEI. Checked for duplicates and validated before registration.
             </small>
           </div>
 
-          <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
-              Hardware Model
-            </label>
-            <select
-              className="select"
-              style={{ width: "100%" }}
-              value={regModel}
-              onChange={(e) => setRegModel(e.target.value)}
-            >
-              <option value="Teltonika FMC920">Teltonika FMC920 (4G LTE Cat 1 / GNSS)</option>
-              <option value="Teltonika FMC130">Teltonika FMC130</option>
-              <option value="Queclink GV300">Queclink GV300</option>
-            </select>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                Assign to Fleet Vehicle
+              </label>
+              <select
+                className="select"
+                style={{ width: "100%" }}
+                value={regVehicleId}
+                onChange={(e) => setRegVehicleId(e.target.value)}
+              >
+                <option value="">-- Leave Unassigned --</option>
+                {workspaceVehicles.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.registration} ({v.name})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                Device Activation Status
+              </label>
+              <select
+                className="select"
+                style={{ width: "100%" }}
+                value={regStatus}
+                onChange={(e) => setRegStatus(e.target.value)}
+              >
+                <option value="active">Active (Authorize TCP connections)</option>
+                <option value="disabled">Disabled (Reject connections)</option>
+              </select>
+            </div>
           </div>
 
-          <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
-              Assign to Fleet Vehicle
+          {account?.role === "Super Admin" && (
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                Organization Assignment
+              </label>
+              <select
+                className="select"
+                style={{ width: "100%" }}
+                value={regOrgId}
+                onChange={(e) => setRegOrgId(e.target.value)}
+              >
+                <option value="org-dubai">Dubai Logistics Fleet (org-dubai)</option>
+                <option value="org-emirates">Emirates Express Cargo (org-emirates)</option>
+                <option value="org-capital">Abu Dhabi Premier Transit (org-capital)</option>
+              </select>
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                Protocol Configuration
+              </label>
+              <select
+                className="select"
+                style={{ width: "100%" }}
+                value={regProtocol}
+                onChange={(e) => setRegProtocol(e.target.value)}
+              >
+                <option value="Teltonika Codec 8 / 8E / 16">Teltonika Codec 8 / 8E / 16</option>
+                <option value="Teltonika Codec 8 / 8E">Teltonika Codec 8 / 8E</option>
+                <option value="Teltonika TCP AVL">Teltonika TCP AVL</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                Supported Codec
+              </label>
+              <select
+                className="select"
+                style={{ width: "100%" }}
+                value={regCodec}
+                onChange={(e) => setRegCodec(e.target.value)}
+              >
+                <option value="Codec 8 / Codec 8 Extended">Codec 8 / 8E Auto-Detect</option>
+                <option value="Codec 8">Codec 8 (0x08)</option>
+                <option value="Codec 8 Extended">Codec 8 Extended (0x8E)</option>
+                <option value="Codec 16">Codec 16 (0x10)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Configurable Ignition Mapping Per Device */}
+          <div style={{ background: "var(--surface-soft)", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border)" }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 6, color: "var(--text)" }}>
+              Ignition Source & Detection Configuration
             </label>
-            <select
-              className="select"
-              style={{ width: "100%" }}
-              value={regVehicleId}
-              onChange={(e) => setRegVehicleId(e.target.value)}
-            >
-              <option value="">-- Leave Unassigned --</option>
-              {workspaceVehicles.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.registration} ({v.name})
-                </option>
-              ))}
-            </select>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+              <select
+                className="select"
+                style={{ width: "100%" }}
+                value={regIgnitionSource}
+                onChange={(e) => setRegIgnitionSource(e.target.value)}
+              >
+                <option value="DIN1">Digital Input 1 (DIN1 - Recommended for hardwired ignition)</option>
+                <option value="VOLTAGE">External Power Voltage Threshold (2-wire installation)</option>
+                <option value="ACCELEROMETER">Accelerometer-Based Detection (Movement sensor)</option>
+                <option value="RPM">Engine RPM Threshold (CAN-bus / OBD integration)</option>
+                <option value="AUTO_AVL239">Teltonika Auto / AVL ID 239</option>
+              </select>
+
+              {regIgnitionSource === "VOLTAGE" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: 11, fontWeight: 600, marginBottom: 2 }}>
+                      ON Threshold (Volts)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      className="input"
+                      style={{ width: "100%" }}
+                      value={regHighVoltage}
+                      onChange={(e) => setRegHighVoltage(e.target.value)}
+                    />
+                    <small style={{ fontSize: 10, color: "var(--muted)" }}>Alternator charging (e.g. 13.2V)</small>
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: 11, fontWeight: 600, marginBottom: 2 }}>
+                      OFF Threshold (Volts)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      className="input"
+                      style={{ width: "100%" }}
+                      value={regLowVoltage}
+                      onChange={(e) => setRegLowVoltage(e.target.value)}
+                    />
+                    <small style={{ fontSize: 10, color: "var(--muted)" }}>Battery resting (e.g. 12.8V)</small>
+                  </div>
+                </div>
+              )}
+
+              {regIgnitionSource === "RPM" && (
+                <div style={{ marginTop: 4 }}>
+                  <label style={{ display: "block", fontSize: 11, fontWeight: 600, marginBottom: 2 }}>
+                    Engine Running RPM Threshold
+                  </label>
+                  <input
+                    type="number"
+                    className="input"
+                    style={{ width: "100%" }}
+                    value={regRpmThreshold}
+                    onChange={(e) => setRegRpmThreshold(e.target.value)}
+                    min="100"
+                    max="2000"
+                  />
+                  <small style={{ fontSize: 10, color: "var(--muted)" }}>Ignition ON when Engine RPM exceeds this value (e.g. 400)</small>
+                </div>
+              )}
+            </div>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -1440,7 +1719,7 @@ export function DataFetchingPage() {
               Cancel
             </button>
             <button type="submit" className="button primary" disabled={regSubmitting}>
-              {regSubmitting ? "Registering..." : "Authorize & Register Device"}
+              {regSubmitting ? "Registering..." : `Authorize & Register ${regModel}`}
             </button>
           </div>
         </form>
@@ -1451,11 +1730,11 @@ export function DataFetchingPage() {
         <Dialog
           open={!!selectedDevice}
           onClose={() => setSelectedDevice(null)}
-          title={`Device Parameters: ${selectedDevice.deviceId}`}
+          title={`Device Parameters: ${selectedDevice.deviceId} (${selectedDevice.deviceModel})`}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {/* Quick Metrics */}
-            <div className="df-overview-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+            <div className="df-overview-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr 1fr" }}>
               <div className="df-key-val-item">
                 <span>Connection</span>
                 <strong style={{ color: selectedDevice.connectionStatus === "Connected" ? "var(--green)" : "#e06c75" }}>
@@ -1464,18 +1743,79 @@ export function DataFetchingPage() {
               </div>
               <div className="df-key-val-item">
                 <span>Ignition Status</span>
-                <strong style={{ color: selectedDevice.ignition === "ON" ? "var(--green)" : "var(--gold)" }}>
-                  {selectedDevice.ignition}
+                <strong style={{ color: selectedDevice.ignition === "ON" ? "var(--green)" : selectedDevice.ignition === "OFF" ? "var(--gold)" : "var(--muted)" }}>
+                  {selectedDevice.ignition} ({selectedDevice.ignitionSource || "DIN1"})
                 </strong>
               </div>
               <div className="df-key-val-item">
                 <span>Vehicle Battery</span>
-                <strong>{selectedDevice.voltageExt ? `${selectedDevice.voltageExt} V` : "N/A"}</strong>
+                <strong>{selectedDevice.voltageExt ? `${selectedDevice.voltageExt.toFixed(1)} V` : "N/A"}</strong>
+              </div>
+              <div className="df-key-val-item">
+                <span>Backup Battery</span>
+                <strong>{selectedDevice.voltageInt ? `${selectedDevice.voltageInt.toFixed(2)} V` : "N/A"}</strong>
               </div>
             </div>
 
+            {/* FMC130 Extended Telemetrics (if FMC130) */}
+            {selectedDevice.deviceModel.includes("130") && (
+              <div style={{ background: "var(--surface-soft)", padding: 12, borderRadius: 8, border: "1px solid var(--border)" }}>
+                <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 8, color: "var(--navy)" }}>
+                  Teltonika FMC130 Sensor & I/O Parameters
+                </div>
+                <div className="category-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                  <div>
+                    <span>Digital Input 1 (DIN1)</span>
+                    <strong>{selectedDevice.din1 !== null && selectedDevice.din1 !== undefined ? (selectedDevice.din1 === 1 ? "Active (High)" : "Inactive (Low)") : "Not Reported"}</strong>
+                  </div>
+                  <div>
+                    <span>Digital Input 2 (DIN2)</span>
+                    <strong>{selectedDevice.din2 !== null && selectedDevice.din2 !== undefined ? (selectedDevice.din2 === 1 ? "Active (High)" : "Inactive (Low)") : "Not Reported"}</strong>
+                  </div>
+                  <div>
+                    <span>Digital Input 3 (DIN3)</span>
+                    <strong>{selectedDevice.din3 !== null && selectedDevice.din3 !== undefined ? (selectedDevice.din3 === 1 ? "Active (High)" : "Inactive (Low)") : "Not Reported"}</strong>
+                  </div>
+                  <div>
+                    <span>Analog Input 1 (AIN1)</span>
+                    <strong>{selectedDevice.ain1Mv !== null && selectedDevice.ain1Mv !== undefined ? `${selectedDevice.ain1Mv} mV` : "Not Wired"}</strong>
+                  </div>
+                  <div>
+                    <span>Analog Input 2 (AIN2)</span>
+                    <strong>{selectedDevice.ain2Mv !== null && selectedDevice.ain2Mv !== undefined ? `${selectedDevice.ain2Mv} mV` : "Not Wired"}</strong>
+                  </div>
+                  <div>
+                    <span>Vehicle Odometer</span>
+                    <strong>{selectedDevice.odometer ? `${selectedDevice.odometer.toFixed(1)} km` : "0.0 km"}</strong>
+                  </div>
+                  <div>
+                    <span>Fuel Level</span>
+                    <strong>{selectedDevice.fuel ? `${selectedDevice.fuel}%` : "Not Configured"}</strong>
+                  </div>
+                  <div>
+                    <span>Engine RPM</span>
+                    <strong>{selectedDevice.rpm ? `${selectedDevice.rpm} RPM` : "0 RPM"}</strong>
+                  </div>
+                  <div>
+                    <span>Engine Temperature</span>
+                    <strong>{selectedDevice.temperature !== null ? `${selectedDevice.temperature}°C` : "N/A"}</strong>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Hardware Information */}
             <div className="category-grid">
+              <div>
+                <span>Manufacturer</span>
+                <strong>{selectedDevice.manufacturer || "Teltonika Telematics"}</strong>
+              </div>
+              <div>
+                <span>Hardware Model</span>
+                <strong style={{ color: selectedDevice.deviceModel.includes("130") ? "#6366f1" : "#0284c7" }}>
+                  {selectedDevice.deviceModel}
+                </strong>
+              </div>
               <div>
                 <span>IMEI</span>
                 <strong style={{ fontFamily: "monospace" }}>{selectedDevice.imei}</strong>
@@ -1485,16 +1825,12 @@ export function DataFetchingPage() {
                 <strong>{selectedDevice.vehicleReg}</strong>
               </div>
               <div>
-                <span>Protocol & Codec</span>
-                <strong>{selectedDevice.protocol}</strong>
+                <span>Protocol & Codecs</span>
+                <strong>{selectedDevice.protocol} (Codec 8, 8E, 16)</strong>
               </div>
               <div>
                 <span>Firmware</span>
                 <strong>{selectedDevice.firmware}</strong>
-              </div>
-              <div>
-                <span>Backup Battery</span>
-                <strong>{selectedDevice.voltageInt ? `${selectedDevice.voltageInt} V` : "N/A"}</strong>
               </div>
               <div>
                 <span>Last Communication</span>
@@ -1518,11 +1854,35 @@ export function DataFetchingPage() {
               </div>
             </div>
 
+            {/* Decoded I/O Elements */}
+            {selectedDevice.ioElements && (
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
+                  Decoded AVL I/O Elements Map:
+                </label>
+                <pre
+                  style={{
+                    background: "var(--surface-soft)",
+                    padding: 10,
+                    borderRadius: 6,
+                    fontSize: 11,
+                    maxHeight: 160,
+                    overflowY: "auto",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  {typeof selectedDevice.ioElements === "string"
+                    ? selectedDevice.ioElements
+                    : JSON.stringify(selectedDevice.ioElements, null, 2)}
+                </pre>
+              </div>
+            )}
+
             {/* Raw AVL Payload */}
             {selectedDevice.rawPayloadHex && (
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>
-                  Latest Raw Codec 8 Hex Payload:
+                  Latest Raw Teltonika Hex Payload:
                 </label>
                 <pre
                   style={{

@@ -41,6 +41,11 @@ export interface BackendDevice {
   firmware_version: string;
   sim_carrier: string;
   reporting_interval_sec: number;
+  ignition_source?: string;
+  ignition_high_threshold?: number;
+  ignition_low_threshold?: number;
+  ignition_rpm_threshold?: number;
+  telemetry_profile?: any;
   last_connection_at: string | null;
   last_communication_at: string | null;
   created_at: string;
@@ -67,6 +72,17 @@ export interface BackendDevice {
     external_voltage: number | null;
     internal_battery_voltage: number | null;
     gsm_signal: number | null;
+    odometer_km?: number | null;
+    fuel_level?: number | null;
+    fuel_used_liters?: number | null;
+    engine_rpm?: number | null;
+    engine_temp?: number | null;
+    din1?: number | null;
+    din2?: number | null;
+    din3?: number | null;
+    ain1_mv?: number | null;
+    ain2_mv?: number | null;
+    io_elements?: any;
     raw_payload_hex: string | null;
     updated_at: string;
   } | null;
@@ -127,6 +143,16 @@ export interface BackendTelemetryResponse {
     external_voltage: number | null;
     internal_battery_voltage: number | null;
     gsm_signal: number | null;
+    odometer_km?: number | null;
+    fuel_level?: number | null;
+    fuel_used_liters?: number | null;
+    engine_rpm?: number | null;
+    engine_temp?: number | null;
+    din1?: number | null;
+    din2?: number | null;
+    din3?: number | null;
+    ain1_mv?: number | null;
+    ain2_mv?: number | null;
     io_elements: string | null;
     codec_id: string;
     raw_payload_hex: string | null;
@@ -152,7 +178,7 @@ export interface BackendLogsResponse {
     severity: "INFO" | "WARN" | "ERROR";
     message: string;
     packet_ref: string | null;
-    details: string | null;
+    details: any;
     created_at: string;
     vehicle_registration?: string;
   }>;
@@ -168,19 +194,17 @@ function getAuthHeaders(): HeadersInit {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
   };
-
   if (typeof window !== "undefined") {
-    try {
-      const session = JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null");
-      if (session?.accountId) {
-        headers["Authorization"] = `Bearer ${session.accountId}`;
-        headers["x-trackwe-account-id"] = session.accountId;
-      }
-    } catch {
-      // Ignore session read error
+    const sessionStr = localStorage.getItem(SESSION_KEY);
+    if (sessionStr) {
+      try {
+        const session = JSON.parse(sessionStr);
+        if (session.account?.id) {
+          headers["Authorization"] = `Bearer ${session.account.id}`;
+        }
+      } catch {}
     }
   }
-
   return headers;
 }
 
@@ -191,39 +215,72 @@ export const telematicsApi = {
       cache: "no-store",
     });
     if (!res.ok) {
-      throw new Error(`Health check returned HTTP ${res.status}: ${res.statusText}`);
+      throw new Error(`Health check returned HTTP ${res.status}`);
     }
     return res.json();
   },
 
-  async fetchDevices(params: {
+  async listDevices(params?: {
     search?: string;
     status?: string;
+    model?: string;
     page?: number;
     limit?: number;
   }): Promise<{ data: BackendDevice[]; pagination: { total: number; page: number; limit: number; pageCount: number } }> {
     const query = new URLSearchParams();
-    if (params.search) query.set("search", params.search);
-    if (params.status && params.status !== "All") query.set("status", params.status);
-    if (params.page !== undefined) query.set("page", params.page.toString());
-    if (params.limit !== undefined) query.set("limit", params.limit.toString());
+    if (params?.search) query.set("search", params.search);
+    if (params?.status && params.status !== "All") query.set("status", params.status);
+    if (params?.model && params.model !== "All") query.set("model", params.model);
+    if (params?.page !== undefined) query.set("page", params.page.toString());
+    if (params?.limit !== undefined) query.set("limit", params.limit.toString());
 
     const res = await fetch(`/api/telematics/devices?${query.toString()}`, {
       headers: getAuthHeaders(),
       cache: "no-store",
     });
     if (!res.ok) {
-      throw new Error(`Devices fetch returned HTTP ${res.status}: ${res.statusText}`);
+      throw new Error(`Devices fetch returned HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
+  async fetchDevices(params?: {
+    search?: string;
+    status?: string;
+    model?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: BackendDevice[]; pagination: { total: number; page: number; limit: number; pageCount: number } }> {
+    return this.listDevices(params);
+  },
+
+  async getDevice(id: string): Promise<{ data: BackendDevice }> {
+    const res = await fetch(`/api/telematics/devices/${id}`, {
+      headers: getAuthHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new Error(`Device fetch returned HTTP ${res.status}`);
     }
     return res.json();
   },
 
   async registerDevice(data: {
     imei: string;
-    model?: string;
+    manufacturer?: string;
+    model: string;
+    protocol?: string;
+    codec?: string;
+    orgId?: string;
     vehicleId?: string | null;
+    status?: string;
     reportingIntervalSec?: number;
     simCarrier?: string;
+    ignitionSource?: string;
+    ignitionHighThreshold?: number;
+    ignitionLowThreshold?: number;
+    ignitionRpmThreshold?: number;
+    telemetryProfile?: any;
   }): Promise<{ data: BackendDevice }> {
     const res = await fetch("/api/telematics/devices", {
       method: "POST",
@@ -243,7 +300,15 @@ export const telematicsApi = {
       vehicleId: string | null;
       status: "active" | "disabled" | "revoked";
       model: string;
+      protocol: string;
+      codec: string;
       reportingIntervalSec: number;
+      simCarrier: string;
+      ignitionSource: string;
+      ignitionHighThreshold: number;
+      ignitionLowThreshold: number;
+      ignitionRpmThreshold: number;
+      telemetryProfile: any;
     }>
   ): Promise<{ data: BackendDevice }> {
     const res = await fetch(`/api/telematics/devices/${id}`, {

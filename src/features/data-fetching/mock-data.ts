@@ -16,7 +16,8 @@ export interface PipelineComponent {
 
 export interface DeviceConnection {
   deviceId: string;
-  deviceModel: "Teltonika FMC130" | "Queclink GV300" | "Meitrack T333" | "Ruptela HCV5";
+  manufacturer?: string;
+  deviceModel: "Teltonika FMC920" | "Teltonika FMC130" | "Queclink GV300" | "Meitrack T333" | "Ruptela HCV5" | string;
   protocol: string;
   vehicleReg: string;
   vehicleName: string;
@@ -42,7 +43,8 @@ export interface DeviceConnection {
   satellites: number;
   hdop: number;
   odometer: number;
-  ignition: "ON" | "OFF" | "Unknown";
+  ignition: "ON" | "OFF" | "Unknown" | "Stale";
+  ignitionSource?: string;
   rpm: number;
   speed: number;
   voltageExt: number;
@@ -51,6 +53,14 @@ export interface DeviceConnection {
   lng?: number;
   fuel: number;
   temperature: number | null;
+  din1?: number | null;
+  din2?: number | null;
+  din3?: number | null;
+  ain1Mv?: number | null;
+  ain2Mv?: number | null;
+  packetCount?: number;
+  parsingErrors?: number;
+  ioElements?: any;
   rawPayloadHex: string;
   config: {
     reportingIntervalSec: number;

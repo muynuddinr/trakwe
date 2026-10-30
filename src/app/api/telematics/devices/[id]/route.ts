@@ -71,9 +71,16 @@ export async function PATCH(
       vehicleId: body.vehicleId !== undefined ? body.vehicleId : undefined,
       status: body.status,
       model: body.model,
+      protocol: body.protocol,
+      codec: body.codec,
       firmwareVersion: body.firmwareVersion,
       reportingIntervalSec: body.reportingIntervalSec,
       simCarrier: body.simCarrier,
+      ignitionSource: body.ignitionSource,
+      ignitionHighThreshold: body.ignitionHighThreshold !== undefined ? Number(body.ignitionHighThreshold) : undefined,
+      ignitionLowThreshold: body.ignitionLowThreshold !== undefined ? Number(body.ignitionLowThreshold) : undefined,
+      ignitionRpmThreshold: body.ignitionRpmThreshold !== undefined ? Number(body.ignitionRpmThreshold) : undefined,
+      telemetryProfile: body.telemetryProfile,
     });
 
     return NextResponse.json({ data: updated });
@@ -104,5 +111,5 @@ export async function DELETE(
   }
 
   await deviceRepo.delete(id);
-  return NextResponse.json({ success: true, message: `Device ${id} revoked successfully.` });
+  return NextResponse.json({ success: true, message: `Device ${id} revoked.` });
 }

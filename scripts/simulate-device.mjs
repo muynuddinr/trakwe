@@ -17,7 +17,12 @@ require.extensions[".ts"] = function (module, filename) {
   );
 };
 
-const { buildImeiHandshakeFrame, buildCodec8Packet, buildCodec8ExtendedPacket } = require("../src/server/protocol/teltonika-builder.ts");
+const {
+  buildImeiHandshakeFrame,
+  buildCodec8Packet,
+  buildCodec8ExtendedPacket,
+  buildCodec16Packet,
+} = require("../src/server/protocol/teltonika-builder.ts");
 const { decodeTeltonikaAck } = require("../src/server/protocol/teltonika-ack.ts");
 
 const args = process.argv.slice(2);
@@ -29,16 +34,30 @@ function getArg(name, def) {
 const host = getArg("--host", process.env.GPS_TCP_HOST || "127.0.0.1");
 const port = parseInt(getArg("--port", process.env.GPS_TCP_PORT || "5027"), 10);
 
-const imei = getArg("--imei", "864275048912345");
+const model = getArg("--model", "FMC130"); // FMC130 or FMC920
+const imei = getArg("--imei", model.includes("130") ? "867123049100001" : "864275048912345");
 const packetsCount = parseInt(getArg("--count", "3"), 10);
-const useExtended = args.includes("--extended");
+const codec = getArg("--codec", model.includes("130") ? "8e" : "8").toLowerCase();
+const ignitionVal = parseInt(getArg("--ignition", "1"), 10);
+const extVoltage = parseFloat(getArg("--voltage", "13.6")) * 1000;
+const rpmVal = parseInt(getArg("--rpm", "1250"), 10);
+const fuelVal = parseInt(getArg("--fuel", "78"), 10);
+const odoKm = parseFloat(getArg("--odometer", "1420.5"));
 
-console.log(`Connecting to Teltonika FMC920 TCP service at ${host}:${port}...`);
-console.log(`Using IMEI: ${imei} (${useExtended ? "Codec 8 Extended" : "Codec 8"})`);
+console.log(`=======================================================`);
+console.log(` TRACKWE TELTONIKA HARDWARE CLIENT SIMULATOR`);
+console.log(`=======================================================`);
+console.log(`Target TCP Host: ${host}:${port}`);
+console.log(`Target Model:    Teltonika ${model}`);
+console.log(`Target IMEI:     ${imei}`);
+console.log(`Protocol Codec:  Codec ${codec.toUpperCase()}`);
+console.log(`Ignition State:  ${ignitionVal === 1 ? "ON" : "OFF"}`);
+console.log(`Packet Count:    ${packetsCount}`);
+console.log(`=======================================================\n`);
 
 const socket = net.createConnection({ host, port }, () => {
-  console.log("Connected to TCP socket server.");
-  console.log("Sending Phase 1 IMEI handshake...");
+  console.log("[Simulator] Connected to TCP socket server.");
+  console.log(`[Simulator] Sending Phase 1 IMEI handshake: ${imei}...`);
   const handshake = buildImeiHandshakeFrame(imei);
   socket.write(handshake);
 });
@@ -51,23 +70,23 @@ socket.on("data", (chunk) => {
     if (chunk.length >= 1) {
       const responseByte = chunk.readUInt8(0);
       if (responseByte === 0x01) {
-        console.log("Handshake SUCCESS: Received 0x01 (Device Authorized).");
+        console.log("[Simulator] Handshake SUCCESS: 0x01 (Device Authorized).");
         phase = "SENDING_DATA";
         sendNextPacket();
       } else {
-        console.error(`Handshake REJECTED: Received 0x${responseByte.toString(16)} (Device Unknown or Disabled).`);
+        console.error(`[Simulator] Handshake REJECTED: 0x${responseByte.toString(16)} (Device Unknown or Disabled).`);
         socket.end();
       }
     }
   } else if (phase === "SENDING_DATA") {
     if (chunk.length >= 4) {
       const ackRecords = decodeTeltonikaAck(chunk);
-      console.log(`Received 4-byte Server ACK: ${ackRecords} records accepted by backend.`);
+      console.log(`[Simulator] Server ACK received: ${ackRecords} record(s) persisted.`);
       sentPackets++;
       if (sentPackets < packetsCount) {
-        setTimeout(sendNextPacket, 500);
+        setTimeout(sendNextPacket, 600);
       } else {
-        console.log(`Successfully completed transmission of ${packetsCount} synthetic packets.`);
+        console.log(`\n[Simulator] Successfully completed transmission of ${packetsCount} synthetic packets.`);
         socket.end();
       }
     }
@@ -77,38 +96,49 @@ socket.on("data", (chunk) => {
 function sendNextPacket() {
   const lat = 25.2048 + (Math.random() - 0.5) * 0.05;
   const lng = 55.2708 + (Math.random() - 0.5) * 0.05;
-  const speed = Math.floor(Math.random() * 80) + 20;
-  const ignition = 1;
-  const extVoltage = 12400 + Math.floor(Math.random() * 600); // ~12.4V to 13.0V
-  const intVoltage = 3800 + Math.floor(Math.random() * 200);  // ~3.8V to 4.0V
-  const gsm = 4;
+  const speed = Math.floor(Math.random() * 60) + 20;
 
-  const records = [
-    {
-      timestamp: Date.now(),
-      latitude: lat,
-      longitude: lng,
-      altitude: 12,
-      angle: 180,
-      satellites: 14,
-      speed,
-      ignition,
-      movement: 1,
-      externalVoltageMv: extVoltage,
-      internalBatteryVoltageMv: intVoltage,
-      gsmSignal: gsm,
-    },
-  ];
+  const recordInput = {
+    timestamp: Date.now(),
+    latitude: lat,
+    longitude: lng,
+    altitude: 15,
+    angle: 90,
+    satellites: 14,
+    speed,
+    ignition: ignitionVal,
+    movement: speed > 5 ? 1 : 0,
+    externalVoltageMv: Math.round(extVoltage + (Math.random() - 0.5) * 200),
+    internalBatteryVoltageMv: 3950,
+    gsmSignal: 5,
+    din1: ignitionVal,
+    din2: 0,
+    din3: 0,
+    ain1Mv: 2400,
+    ain2Mv: 1100,
+    odometerKm: odoKm + sentPackets * 0.2,
+    fuelPercent: fuelVal,
+    engineRpm: ignitionVal ? rpmVal : 0,
+    engineTemp: 88,
+  };
 
-  const packet = useExtended ? buildCodec8ExtendedPacket(records) : buildCodec8Packet(records);
-  console.log(`Sending packet #${sentPackets + 1} (${packet.length} bytes, Speed: ${speed} km/h, ExtV: ${(extVoltage/1000).toFixed(2)}V)...`);
+  let packet;
+  if (codec === "16" || codec === "0x10") {
+    packet = buildCodec16Packet([recordInput]);
+  } else if (codec === "8e" || codec === "extended" || codec === "0x8e") {
+    packet = buildCodec8ExtendedPacket([recordInput]);
+  } else {
+    packet = buildCodec8Packet([recordInput]);
+  }
+
+  console.log(`[Simulator] Sending Packet #${sentPackets + 1} (${packet.length} bytes, Speed: ${speed} km/h, Ignition: ${ignitionVal ? "ON" : "OFF"})...`);
   socket.write(packet);
 }
 
 socket.on("error", (err) => {
-  console.error("Socket error:", err.message);
+  console.error("[Simulator] Socket error:", err.message);
 });
 
 socket.on("close", () => {
-  console.log("TCP connection closed.");
+  console.log("[Simulator] TCP connection closed.");
 });

@@ -29,4 +29,15 @@ if (r2.status !== 0) {
   process.exit(r2.status ?? 1);
 }
 
-console.log("\n✅ ALL TEST SUITES COMPLETED SUCCESSFULLY (37 checks passed across 2 suites)!\n");
+console.log("\n--> Suite 3: Teltonika FMC130 Protocol & Backend Integration Tests");
+const r3 = spawnSync(process.execPath, [path.join(root, "tests", "fmc130-backend.test.cjs")], {
+  stdio: "inherit",
+  cwd: root,
+});
+
+if (r3.status !== 0) {
+  console.error("Suite 3 Failed!");
+  process.exit(r3.status ?? 1);
+}
+
+console.log("\n✅ ALL TEST SUITES COMPLETED SUCCESSFULLY (55 checks passed across 3 suites)!\n");
